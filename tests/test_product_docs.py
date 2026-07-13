@@ -2,6 +2,7 @@ from pathlib import Path
 import ipaddress
 import re
 import subprocess
+import tomllib
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -291,3 +292,17 @@ def test_reproducible_dependency_locks_are_tracked_and_checked() -> None:
     testing = _text("docs/testing/TESTING.md")
     assert "uv.lock" in testing
     assert "rsshub/package-lock.json" in testing
+
+
+def test_pytest_imports_src_layout_from_non_ascii_project_paths() -> None:
+    project = tomllib.loads(_text("pyproject.toml"))
+    assert project["tool"]["pytest"]["ini_options"]["pythonpath"] == ["src"]
+    command = "uv sync --locked --extra test --no-editable"
+    assert command in _text("README.md")
+    assert command in _text("docs/testing/TESTING.md")
+    assert command in _text(".github/workflows/ci.yml")
+    assert "uv run --no-sync pytest" in _text("README.md")
+    assert "uv run --no-sync pytest" in _text("docs/testing/TESTING.md")
+    workflow = _text(".github/workflows/ci.yml")
+    assert "uv run --no-sync pytest" in workflow
+    assert "uv run --no-sync codex-quota-monitor --help" in workflow

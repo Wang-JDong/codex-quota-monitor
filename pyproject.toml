@@ -20,3 +20,4 @@ packages = ["src/codex_quota_monitor"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+pythonpath = ["src"]

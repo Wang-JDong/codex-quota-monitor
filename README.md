@@ -75,8 +75,8 @@ flowchart LR
 本地验证不需要真实密钥或外网服务：
 
 ```bash
-uv sync --locked --extra test
-uv run pytest
+uv sync --locked --extra test --no-editable
+uv run --no-sync pytest
 ```
 
 VPS 上线前，请完整阅读 [部署指南](docs/operations/DEPLOYMENT.md)，先执行 `make preflight`，再安装和 dry-run，最后在 `make postflight` 与 `make resource-check` 均通过后执行 `make enable`。不要把 X Cookie、飞书 Webhook 或签名密钥写入 Git。

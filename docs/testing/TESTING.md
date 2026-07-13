@@ -21,7 +21,7 @@
 Python 测试依赖必须使用已跟踪的 `uv.lock`，RSSHub 生产依赖必须使用已跟踪的 `rsshub/package-lock.json`。CI 在安装任何依赖前验证两个文件都来自干净 checkout。
 
 ```bash
-uv sync --locked --extra test
+uv sync --locked --extra test --no-editable
 ```
 
 也可在已经准备好 Python 3.12 + pytest 8 的隔离环境中运行。生产 VPS 不需要安装 pytest、uv 或任何 Python 运行时依赖。
@@ -31,20 +31,20 @@ uv sync --locked --extra test
 全量测试：
 
 ```bash
-uv run pytest
+uv run --no-sync pytest
 ```
 
 单文件/单用例：
 
 ```bash
-uv run pytest tests/test_classifier.py
-uv run pytest tests/test_service.py::test_first_run_baselines_then_new_match_sends_once
+uv run --no-sync pytest tests/test_classifier.py
+uv run --no-sync pytest tests/test_service.py::test_first_run_baselines_then_new_match_sends_once
 ```
 
 Python 语法与导入前置编译：
 
 ```bash
-uv run python -m compileall -q src tests
+uv run --no-sync python -m compileall -q src tests
 ```
 
 Shell 语法：

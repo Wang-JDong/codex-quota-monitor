@@ -20,11 +20,13 @@ jobs:
       - name: Verify tracked dependency locks
         run: git ls-files --error-unmatch uv.lock rsshub/package-lock.json
       - name: Install locked test dependencies
-        run: uv sync --locked --extra test
+        run: uv sync --locked --extra test --no-editable
       - name: Run full test suite
-        run: uv run pytest
+        run: uv run --no-sync pytest
+      - name: Smoke-test installed CLI
+        run: uv run --no-sync codex-quota-monitor --help
       - name: Compile Python sources and tests
-        run: uv run python -m compileall -q src tests
+        run: uv run --no-sync python -m compileall -q src tests
       - name: Validate shell syntax
         run: find deploy -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
       - name: Check whitespace

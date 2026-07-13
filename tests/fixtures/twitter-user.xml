@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Twitter @Tibo</title>
+    <item>
+      <title>Give us 24 hours to reset the Codex rate limits across all plans.</title>
+      <link>https://x.com/thsottiaux/status/2066956441173323943</link>
+      <guid>https://twitter.com/thsottiaux/status/2066956441173323943</guid>
+      <pubDate>Tue, 16 Jun 2026 12:00:00 GMT</pubDate>
+      <description><![CDATA[Give us 24 hours to reset the Codex rate limits across all plans.]]></description>
+    </item>
+    <item>
+      <title>Re We are resetting the Codex rate limits now.</title>
+      <link>https://x.com/thsottiaux/status/2066956441173323999</link>
+      <guid>https://twitter.com/thsottiaux/status/2066956441173323999</guid>
+      <pubDate>Tue, 16 Jun 2026 13:00:00 GMT</pubDate>
+      <description><![CDATA[
+        <p>Reply context</p>
+        <div class="rsshub-quote">
+          <a href="https://x.com/OpenAI/status/111">@OpenAI</a><br>
+          <span>We have reset Codex usage limits.</span><img src="avatar.png">
+        </div>
+        <p>Outside timeline text.</p>
+      ]]></description>
+    </item>
+  </channel>
+</rss>

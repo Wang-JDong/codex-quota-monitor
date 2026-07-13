@@ -1,0 +1,11 @@
+.env
+.venv/
+.worktrees/
+.DS_Store
+__pycache__/
+.pytest_cache/
+*.py[cod]
+data/
+*.db
+*.db-shm
+*.db-wal

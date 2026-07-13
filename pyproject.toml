@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "codex-quota-monitor"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8.3,<9"]
+
+[project.scripts]
+codex-quota-monitor = "codex_quota_monitor.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/codex_quota_monitor"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

@@ -1,0 +1,9 @@
+/var/log/codex-quota-monitor/monitor.log {
+    weekly
+    maxsize 5M
+    rotate 4
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "dependencies": {
+    "rsshub": "1.0.0-master.4436842"
+  }
+}

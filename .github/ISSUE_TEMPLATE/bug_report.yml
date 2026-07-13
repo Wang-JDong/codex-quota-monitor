@@ -1,0 +1,40 @@
+name: Bug report
+description: 报告可复现的功能或运维问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请删除 Cookie、Webhook、签名密钥、账号、邮箱、真实主机信息和未去秘密日志。安全问题请按 SECURITY.md 报告。
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题概述
+      description: 实际行为与预期行为是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 最小复现步骤
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本或 commit
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 已去秘密的诊断信息
+      description: 可包含 Python/systemd 版本和安全错误类别，不要粘贴完整 .env。
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 敏感信息检查
+      options:
+        - label: 我已确认本报告不包含秘密或个人主机信息
+          required: true

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Codex quota monitor hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+AccuracySec=1min
+Unit=codex-quota-monitor.service
+
+[Install]
+WantedBy=timers.target

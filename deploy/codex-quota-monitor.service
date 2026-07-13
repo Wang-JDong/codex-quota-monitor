@@ -1,0 +1,32 @@
+[Unit]
+Description=Check trusted X accounts for Codex quota resets
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=codex-monitor
+Group=codex-monitor
+WorkingDirectory=/opt/codex-quota-monitor
+EnvironmentFile=/opt/codex-quota-monitor/.env
+Environment=PORT=1200
+Environment=LISTEN_INADDR_ANY=0
+Environment=CACHE_TYPE=memory
+Environment=NODE_ENV=production
+Environment=NODE_OPTIONS=--max-old-space-size=256
+ExecStartPre=+/opt/codex-quota-monitor/runtime/node/bin/node /opt/codex-quota-monitor/rsshub/server.mjs --refresh-query-ids
+ExecStart=/opt/codex-quota-monitor/deploy/run-monitor.sh run
+TimeoutStartSec=5min
+MemoryMax=384M
+CPUQuota=30%
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/codex-quota-monitor/data /var/log/codex-quota-monitor /opt/codex-quota-monitor/rsshub/node_modules/rsshub/dist-lib
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+StandardOutput=append:/var/log/codex-quota-monitor/monitor.log
+StandardError=append:/var/log/codex-quota-monitor/monitor.log

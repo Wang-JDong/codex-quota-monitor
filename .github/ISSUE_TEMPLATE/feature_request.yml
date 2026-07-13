@@ -1,0 +1,31 @@
+name: Feature request
+description: 提议一个与产品边界一致的功能
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 用户问题
+      description: 请先描述谁在什么场景下遇到什么问题。
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 期望结果与非目标
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: 对信任、资源和现有节点的影响
+      description: 说明是否改变可信来源、投递语义、依赖或部署权限。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 可验证的验收标准
+    validations:
+      required: true

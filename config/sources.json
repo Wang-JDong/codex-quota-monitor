@@ -1,0 +1,12 @@
+{
+  "feed_count": 20,
+  "failure_threshold": 3,
+  "request_timeout_seconds": 20,
+  "request_retries": 3,
+  "sources": [
+    {"handle": "OpenAI", "include_replies": false},
+    {"handle": "OpenAIDevs", "include_replies": false},
+    {"handle": "thsottiaux", "include_replies": false},
+    {"handle": "sama", "include_replies": false}
+  ]
+}

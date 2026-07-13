@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - name: Verify tracked dependency locks
+        run: git ls-files --error-unmatch uv.lock rsshub/package-lock.json
+      - name: Install locked test dependencies
+        run: uv sync --locked --extra test
+      - name: Run full test suite
+        run: uv run pytest
+      - name: Compile Python sources and tests
+        run: uv run python -m compileall -q src tests
+      - name: Validate shell syntax
+        run: find deploy -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      - name: Check whitespace
+        run: git diff --check

@@ -196,6 +196,46 @@ def test_nonmatches_and_baseline_do_not_enter_delivery_queue(tmp_path) -> None:
     assert rows == [("baseline", None, None), ("nonmatch", None, None)]
 
 
+def test_promotes_existing_unmatched_post_once_with_fresh_content(tmp_path) -> None:
+    database = tmp_path / "monitor.db"
+    store = Store(database, 3)
+    store.initialize()
+    original = sample("banked")
+    store.record_decision(original, Decision(False, None, "missing:limit"))
+    refreshed = Post(
+        original.post_id,
+        original.author,
+        "We have added a banked reset for Codex weekly usage.",
+        original.published_at,
+        original.url,
+    )
+    decision = Decision(
+        True,
+        ResetStatus("banked_available"),
+        "explicit_codex_banked_reset",
+        ("product", "limit", "reset", "banked_available"),
+    )
+
+    assert store.promote_unmatched(refreshed, decision) is True
+    assert store.promote_unmatched(refreshed, decision) is False
+
+    pending = store.pending()
+    assert len(pending) == 1
+    assert pending[0].post.text == refreshed.text
+    assert pending[0].decision == decision
+
+
+def test_promotion_rejects_nonmatch_and_missing_post(tmp_path) -> None:
+    store = Store(tmp_path / "monitor.db", 3)
+    store.initialize()
+
+    with pytest.raises(ValueError, match="matched decision"):
+        store.promote_unmatched(sample(), Decision(False, None, "no match"))
+
+    decision = Decision(True, ResetStatus.COMPLETED, "explicit", ("reset",))
+    assert store.promote_unmatched(sample("missing"), decision) is False
+
+
 def test_manual_resolution_requires_matched_failed_delivery(tmp_path) -> None:
     store = Store(tmp_path / "monitor.db", 3)
     store.initialize()

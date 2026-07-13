@@ -113,6 +113,26 @@ def test_post_notification_rejects_decision_without_status() -> None:
         notification_for_post(sample_post(), Decision(False, None, "no match"))
 
 
+def test_banked_reset_notification_uses_distinct_accurate_copy() -> None:
+    banked = Post(
+        "2076735790567338203",
+        "thsottiaux",
+        "We have added a banked reset for Codex weekly usage.",
+        datetime(2026, 7, 13, 18, 29, tzinfo=UTC),
+        "https://x.com/thsottiaux/status/2076735790567338203",
+    )
+
+    note = notification_for_post(
+        banked,
+        Decision(True, ResetStatus("banked_available"), "explicit"),
+    )
+
+    assert note.title == "Codex 额度通知｜可保存重置次数已发放"
+    assert "**状态：** 可保存重置次数已发放" in note.body
+    assert "不会自动表示当前额度已恢复" in note.body
+    assert banked.text in note.body
+
+
 def test_health_notifications_are_clear_and_have_no_link() -> None:
     alert = health_notification(HealthTransition.ALERT)
     recovered = health_notification(HealthTransition.RECOVERED)

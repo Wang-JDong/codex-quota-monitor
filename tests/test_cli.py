@@ -35,6 +35,15 @@ class FakeService:
         self.dry_runs.append(dry_run)
         return Summary()
 
+    def reprocess(self, post_id):
+        self.reprocessed = post_id
+        return {
+            "post_id": post_id,
+            "matched": True,
+            "changed": True,
+            "sent": True,
+        }
+
 
 class FakeStore:
     def __init__(self) -> None:
@@ -154,4 +163,20 @@ def test_health_resolve_requires_transition_and_explicit_resolution(
     assert json.loads(captured.out) == {
         "transition": "recovered",
         "delivery_state": "sent",
+    }
+
+
+def test_reprocess_post_uses_lock_and_prints_json(monkeypatch, capsys) -> None:
+    service, store, feishu, captured = run_cli(
+        monkeypatch, capsys, "reprocess-post", "2076735790567338203"
+    )
+
+    assert service.reprocessed == "2076735790567338203"
+    assert store.locked == 1
+    assert feishu.sent == []
+    assert json.loads(captured.out) == {
+        "post_id": "2076735790567338203",
+        "matched": True,
+        "changed": True,
+        "sent": True,
     }

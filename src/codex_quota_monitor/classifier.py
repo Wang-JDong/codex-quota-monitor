@@ -5,7 +5,8 @@ from .models import Decision, Post, ResetStatus
 
 PRODUCT = re.compile(r"\bcodex\b", re.I)
 LIMIT = re.compile(
-    r"\b(rate|usage)\s+limits?\b|\bquota\b|\bcodex\s+usage\b|\badditional\s+reset\b",
+    r"\b(rate|usage)\s+limits?\b|\bquota\b|\bcodex\s+usage\b|"
+    r"\bweekly\s+usage\b|\badditional\s+reset\b",
     re.I,
 )
 RESET = re.compile(
@@ -19,6 +20,7 @@ QUESTION = re.compile(
 )
 EXCLUDE = re.compile(
     r"\bshould\s+we\b|\bwould\s+you\b|\bif\s+we\b|\bplease\b|\bhope\b|"
+    r"\b(?:have|has)\s+not\s+added\b|"
     r"\bnot\s+(?:been\s+)?reset\b|\bdo\s+not\s+reset\b|\bdon't\s+reset\b|"
     r"\bno\s+plans?\s+to\s+reset\b|\b(?:do\s+not|don't)\s+intend\s+to\s+reset\b|"
     r"\bwill\s+not\s+reset\b|\bwon't\s+reset\b|\breset\s+failed\b|\binvite\b|\breferr?al\b|"
@@ -46,6 +48,12 @@ PLANNED = re.compile(
     r"\breset\b.{0,40}\bwill\s+come\b",
     re.I,
 )
+BANKED_RESET = re.compile(r"\bbanked\s+reset\b", re.I)
+BANKED_GRANTED = re.compile(
+    r"\b(?:we|i)\s+have\s+added\b|\bwe(?:'ve|’ve)\s+added\b|"
+    r"\bhas\s+added\b|\badded\s+(?:a|an|one|the)\s+banked\s+reset\b",
+    re.I,
+)
 
 
 def classify(post: Post, trusted_handles: frozenset[str]) -> Decision:
@@ -67,7 +75,10 @@ def classify(post: Post, trusted_handles: frozenset[str]) -> Decision:
         missing = ",".join(name for name, found in checks.items() if not found)
         return Decision(False, None, f"missing:{missing}")
 
-    if COMPLETED.search(text):
+    if BANKED_RESET.search(text) and BANKED_GRANTED.search(text):
+        status = ResetStatus.BANKED_AVAILABLE
+        state_rule = "banked_available"
+    elif COMPLETED.search(text):
         status = ResetStatus.COMPLETED
         state_rule = "completed"
     elif IN_PROGRESS.search(text):
@@ -82,6 +93,10 @@ def classify(post: Post, trusted_handles: frozenset[str]) -> Decision:
     return Decision(
         True,
         status,
-        "explicit_codex_limit_reset",
+        (
+            "explicit_codex_banked_reset"
+            if status is ResetStatus.BANKED_AVAILABLE
+            else "explicit_codex_limit_reset"
+        ),
         ("product", "limit", "reset", state_rule),
     )

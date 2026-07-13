@@ -7,6 +7,7 @@ class ResetStatus(StrEnum):
     COMPLETED = "completed"
     IN_PROGRESS = "in_progress"
     PLANNED = "planned"
+    BANKED_AVAILABLE = "banked_available"
 
 
 class HealthTransition(StrEnum):

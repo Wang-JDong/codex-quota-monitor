@@ -105,6 +105,37 @@ def test_parses_rsshub_json_post_and_trusted_quote() -> None:
     assert post.is_retweet is False
 
 
+def test_prefers_full_description_when_rsshub_title_is_truncated() -> None:
+    full_text = (
+        "Thank you to the 7M active users who are now using Codex and ChatGPT "
+        "Work. We have added a banked reset to everyone's account to celebrate "
+        "the milestone. You can apply the reset in the desktop app or on web and "
+        "it will replenish the weekly usage for you. Have fun out there."
+    )
+    response = _json_response(
+        [
+            {
+                "title": (
+                    "Thank you to the 7M active users who are now using Codex "
+                    "and ChatGPT Work. We have added a banked reset to everyone's "
+                    "account to celebrate the milesto..."
+                ),
+                "author": "Tibo",
+                "description": f"<p>{full_text}</p>",
+                "pubDate": "Mon, 13 Jul 2026 18:29:31 GMT",
+                "link": "https://x.com/thsottiaux/status/2076735790567338203",
+                "guid": "https://x.com/thsottiaux/status/2076735790567338203",
+            }
+        ]
+    )
+    client = RssHubClient("http://rsshub:1200", timeout=20, retries=1, count=20)
+
+    with patch("codex_quota_monitor.feed.urlopen", return_value=response):
+        parsed = client.fetch(Source("thsottiaux", False))[0]
+
+    assert parsed.text == full_text
+
+
 def test_parses_rsshub_public_api_author_array() -> None:
     response = _json_response(
         [

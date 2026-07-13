@@ -54,6 +54,28 @@ def test_matches_explicit_simple_past_reset_announcement() -> None:
     assert decision.status is ResetStatus.COMPLETED
 
 
+def test_matches_explicit_banked_reset_grant_as_distinct_status() -> None:
+    text = (
+        "Thank you to the 7M active users who are now using Codex and ChatGPT "
+        "Work. We have added a banked reset to everyone's account to celebrate "
+        "the milestone. You can apply the reset in the desktop app or on web and "
+        "it will replenish the weekly usage for you. Have fun out there."
+    )
+
+    decision = classify(post(text), TRUSTED)
+
+    assert decision.matched is True
+    assert decision.status is not None
+    assert decision.status.value == "banked_available"
+    assert decision.reason == "explicit_codex_banked_reset"
+    assert decision.matched_rules == (
+        "product",
+        "limit",
+        "reset",
+        "banked_available",
+    )
+
+
 @pytest.mark.parametrize(
     "text",
     [
@@ -144,4 +166,18 @@ def test_original_text_from_trusted_account_still_matches_with_quote_present() -
     ],
 )
 def test_rejects_periodic_or_mechanism_explanations(text: str) -> None:
+    assert classify(post(text), TRUSTED).matched is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "How to use the banked reset for Codex weekly usage.",
+        "Invite a friend and get a banked reset for Codex weekly usage.",
+        "If we added a banked reset, Codex weekly usage would replenish.",
+        "Codex weekly usage includes a recurring banked reset mechanism.",
+        "We have not added a banked reset for Codex weekly usage.",
+    ],
+)
+def test_rejects_non_announcement_banked_reset_language(text: str) -> None:
     assert classify(post(text), TRUSTED).matched is False

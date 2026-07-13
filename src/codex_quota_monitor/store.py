@@ -288,6 +288,35 @@ class Store:
         with self._connect() as connection:
             self._insert(connection, post, decision)
 
+    def promote_unmatched(self, post: Post, decision: Decision) -> bool:
+        if not decision.matched or decision.status is None:
+            raise ValueError("promotion requires a matched decision with status")
+        content_hash = self._content_hash(post, decision)
+        with self._connect() as connection:
+            result = connection.execute(
+                "UPDATE posts SET author = ?, text = ?, quoted_text = ?, "
+                "quoted_author = ?, is_retweet = ?, published_at = ?, url = ?, "
+                "matched = 1, status = ?, reason = ?, matched_rules = ?, pushed = 0, "
+                "delivery_state = ?, attempt_count = 0, last_delivery_error = NULL, "
+                "content_hash = ? WHERE post_id = ? AND matched = 0",
+                (
+                    post.author,
+                    post.text,
+                    post.quoted_text,
+                    post.quoted_author,
+                    int(post.is_retweet),
+                    post.published_at.isoformat(),
+                    post.url,
+                    decision.status.value,
+                    decision.reason,
+                    json.dumps(decision.matched_rules),
+                    DeliveryState.PENDING,
+                    content_hash,
+                    post.post_id,
+                ),
+            )
+            return result.rowcount == 1
+
     def pending(self) -> list[StoredMatch]:
         with self._connect() as connection:
             rows = connection.execute(

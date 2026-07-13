@@ -190,7 +190,7 @@ class RssHubClient:
         feed_content = _child_text(entry, "description", "content")
         quote = QuoteParser()
         quote.feed(feed_content)
-        text = _plain_text(title) if title else " ".join(quote.main_text)
+        text = _primary_text(title, quote.main_text)
         text = re.sub(r"^Re\s+", "", text)
         published_at = _published_at(
             _child_text(entry, "pubDate", "published", "updated")
@@ -233,11 +233,7 @@ class RssHubClient:
 
         quote = QuoteParser()
         quote.feed(values["description"])
-        text = (
-            _plain_text(values["title"])
-            if values["title"]
-            else " ".join(quote.main_text)
-        )
+        text = _primary_text(values["title"], quote.main_text)
         text = re.sub(r"^Re\s+", "", text)
         return Post(
             post_id=post_id,
@@ -374,6 +370,14 @@ def _status_identity(url: str) -> tuple[str, str]:
 def _plain_text(value: str) -> str:
     without_tags = re.sub(r"<[^>]+>", " ", unescape(value))
     return " ".join(without_tags.split())
+
+
+def _primary_text(title: str, description_parts: list[str]) -> str:
+    title_text = _plain_text(title)
+    description_text = " ".join(description_parts)
+    if len(description_text) > len(title_text):
+        return description_text
+    return title_text or description_text
 
 
 def _published_at(value: str) -> datetime:

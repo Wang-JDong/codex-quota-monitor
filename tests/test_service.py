@@ -67,6 +67,47 @@ def test_first_run_baselines_then_new_match_sends_once(tmp_path) -> None:
     assert "已经重置" in feishu.sent[0].title
 
 
+def test_reprocesses_known_unmatched_post_and_sends_exactly_once(tmp_path) -> None:
+    source = Source("thsottiaux")
+    full = Post(
+        "2076735790567338203",
+        "thsottiaux",
+        "We have added a banked reset for Codex weekly usage.",
+        datetime.now(UTC),
+        "https://x.com/thsottiaux/status/2076735790567338203",
+    )
+    feed = FakeFeed({"thsottiaux": [full]})
+    service, store, feishu = service_for(tmp_path, (source,), feed)
+    stored = Post(full.post_id, full.author, "truncated...", full.published_at, full.url)
+    store.record_decision(stored, Decision(False, None, "missing:limit"))
+
+    first = service.reprocess(full.post_id)
+    second = service.reprocess(full.post_id)
+
+    assert first.post_id == full.post_id
+    assert first.changed is True
+    assert first.sent is True
+    assert second.changed is False
+    assert second.sent is False
+    assert len(feishu.sent) == 1
+    assert "可保存重置次数已发放" in feishu.sent[0].title
+    assert store.status()["delivery_attempts"] == 1
+
+
+def test_reprocess_fails_without_mutation_when_post_is_not_in_feed(tmp_path) -> None:
+    source = Source("thsottiaux")
+    service, store, feishu = service_for(
+        tmp_path, (source,), FakeFeed({"thsottiaux": []})
+    )
+    store.record_decision(post("missing", "thsottiaux"), Decision(False, None, "old"))
+
+    with pytest.raises(ValueError, match="not found in current trusted feeds"):
+        service.reprocess("missing")
+
+    assert feishu.sent == []
+    assert store.pending() == []
+
+
 def test_explicit_retryable_pending_failure_is_retried_next_run(tmp_path) -> None:
     class FailOnceFeishu(FakeFeishu):
         def __init__(self) -> None:

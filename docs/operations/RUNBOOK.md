@@ -105,6 +105,16 @@ make status
 
 不要直接编辑 SQLite，也不要在未查看飞书群时选择 retry。
 
+## `reprocess-post` 补处理历史漏报
+
+当抓取已经保存帖子、但旧规则把它判为未匹配时，先完成代码升级和 dry-run，再按帖子 ID 执行：
+
+```bash
+sudo -u codex-monitor bash -c 'set -a; source /opt/codex-quota-monitor/.env; set +a; PYTHONPATH=/opt/codex-quota-monitor/src /usr/bin/python3 -m codex_quota_monitor reprocess-post "$1"' _ POST_ID
+```
+
+命令会重新从四个可信 feed 找到精确 ID、使用当前规则分类，并仅把数据库中已有的未匹配行提升为待发送。成功输出中的 `changed=true`、`sent=true` 表示本次已补发；重复执行必须返回 `changed=false`、`sent=false`，且 `delivery_attempts` 不增加。帖子不在当前 feed 或仍不匹配时，命令不修改数据库。不要用它导入任意 URL，也不要直接更新 SQLite。
+
 ## `health-resolve` 健康通知核对
 
 健康 `alert` 或 `recovered` 在超时、断连、5xx 或响应无法确认后会进入 `uncertain`，下一轮和重启后都不会自动重发。先在飞书群按标题核对，然后执行下列其中一条：

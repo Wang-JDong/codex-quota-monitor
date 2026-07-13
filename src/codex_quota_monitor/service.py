@@ -24,6 +24,14 @@ class RunSummary:
     sent_posts: int
 
 
+@dataclass(frozen=True)
+class ReprocessSummary:
+    post_id: str
+    matched: bool
+    changed: bool
+    sent: bool
+
+
 class MonitorService:
     def __init__(
         self,
@@ -85,6 +93,28 @@ class MonitorService:
             return False
         self.store.mark_health_sent(transition)
         return True
+
+    def reprocess(self, post_id: str) -> ReprocessSummary:
+        found: Post | None = None
+        for source in self.sources:
+            try:
+                posts = self.feed.fetch(source)
+            except FeedError:
+                continue
+            found = next((post for post in posts if post.post_id == post_id), None)
+            if found is not None:
+                break
+        if found is None:
+            raise ValueError("post not found in current trusted feeds")
+
+        decision = classify(found, self.trusted)
+        if not decision.matched:
+            raise ValueError(f"post did not match: {decision.reason}")
+        changed = self.store.promote_unmatched(found, decision)
+        if not changed:
+            return ReprocessSummary(post_id, True, False, False)
+        sent = self._send_business(found, decision)
+        return ReprocessSummary(post_id, True, True, sent)
 
     def run(self, dry_run: bool = False) -> RunSummary:
         fetched = 0

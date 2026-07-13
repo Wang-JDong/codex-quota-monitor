@@ -16,11 +16,11 @@
 | `run-monitor.sh` | 启动 RSSHub、验证监听者、运行 Python、无条件清理 | 单次任务，最长 5 分钟 |
 | 项目私有 RSSHub | 使用 X `auth_token` 和 `UserTweets` 提供四个用户的顶层原创帖 | 仅 loopback；生产 `1200`，dry-run `1201` |
 | Query ID refresh | 从 X 官方前端包严格提取两个查询 ID | 单独 root 预处理；仅 RSSHub `dist-lib` 可写 |
-| `RssHubClient` | 抓取、重试、JSON/XML 解析和原帖作者/链接校验 | Python 3.12 标准库 |
-| 确定性分类器 | 白名单、产品、限制、重置和排除语义 | 无网络、无 LLM |
+| `RssHubClient` | 抓取、重试、JSON/XML 解析、完整正文选择和原帖作者/链接校验 | Python 3.12 标准库 |
+| 确定性分类器 | 白名单、产品、限制、普通重置、banked reset 和排除语义 | 无网络、无 LLM |
 | `Store` | 基线、去重、投递状态和健康状态 | SQLite/WAL，生产持久化 |
 | `FeishuClient` | 签名并发送业务/健康卡片 | 只访问配置的 Webhook |
-| CLI | `run`、`dry-run`、`status`、`test-notification`、`delivery-resolve`、`health-resolve` | 管理员显式调用 |
+| CLI | `run`、`dry-run`、`status`、`test-notification`、`reprocess-post`、`delivery-resolve`、`health-resolve` | 管理员显式调用 |
 
 ## 单次运行时序
 
@@ -71,6 +71,8 @@ SQLite 包含三类表：
 - `state`：键值状态，用于连续全失败轮数、健康告警激活标记，以及健康迁移的 epoch、投递状态、尝试次数和安全错误标签。
 
 SQLite 不存储 X Cookie、飞书 Webhook 或飞书签名密钥。
+
+RSSHub 标题可能被截断；解析器在 description 的非引用正文更长时优先保存该正文。`reprocess-post` 只允许把已存在的 `matched=0` 行原子提升为 `pending`，同时替换完整正文和新分类；已匹配或已发送行不会再次进入队列。
 
 ## 投递状态机
 

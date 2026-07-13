@@ -16,6 +16,7 @@ LABELS = {
     ResetStatus.COMPLETED: "已经重置",
     ResetStatus.IN_PROGRESS: "正在重置",
     ResetStatus.PLANNED: "计划重置",
+    ResetStatus.BANKED_AVAILABLE: "可保存重置次数已发放",
 }
 
 
@@ -41,15 +42,24 @@ def notification_for_post(post: Post, decision: Decision) -> Notification:
     beijing_time = post.published_at.astimezone(ZoneInfo("Asia/Shanghai")).strftime(
         "%Y-%m-%d %H:%M"
     )
+    banked_note = (
+        "\n**说明：** 这是可手动使用的重置次数，不会自动表示当前额度已恢复。\n"
+        if decision.status is ResetStatus.BANKED_AVAILABLE
+        else ""
+    )
     body = (
         f"**状态：** {label}\n"
+        f"{banked_note}"
         f"**来源：** @{post.author}\n"
         f"**时间：** {beijing_time}（北京时间）\n\n"
         f"**官方原文：**\n{post.text[:1500]}"
     )
-    return Notification(
-        f"Codex 额度重置通知｜{label}", body, "green", post.url
+    title = (
+        f"Codex 额度通知｜{label}"
+        if decision.status is ResetStatus.BANKED_AVAILABLE
+        else f"Codex 额度重置通知｜{label}"
     )
+    return Notification(title, body, "green", post.url)
 
 
 def health_notification(transition: HealthTransition) -> Notification:

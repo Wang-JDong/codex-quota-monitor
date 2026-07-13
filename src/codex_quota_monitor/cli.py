@@ -43,6 +43,10 @@ def _parser() -> argparse.ArgumentParser:
     commands.add_parser("dry-run", help="inspect feeds without changing state")
     commands.add_parser("status", help="show local monitor state")
     commands.add_parser("test-notification", help="send one Feishu test card")
+    reprocess = commands.add_parser(
+        "reprocess-post", help="reclassify and deliver one previously seen post"
+    )
+    reprocess.add_argument("post_id")
     resolve = commands.add_parser(
         "delivery-resolve", help="manually resolve an uncertain delivery"
     )
@@ -78,6 +82,11 @@ def main() -> None:
         print(json.dumps(asdict(result), ensure_ascii=False))
     elif args.command == "status":
         print(json.dumps(store.status(), ensure_ascii=False, indent=2))
+    elif args.command == "reprocess-post":
+        with store.run_lock():
+            result = service.reprocess(args.post_id)
+        payload = result if isinstance(result, dict) else asdict(result)
+        print(json.dumps(payload, ensure_ascii=False))
     elif args.command == "delivery-resolve":
         state = store.resolve_delivery(args.post_id, args.resolution)
         print(

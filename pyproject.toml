@@ -9,7 +9,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest>=8.3,<9"]
+test = ["pytest>=8.3,<10"]
 
 [project.scripts]
 codex-quota-monitor = "codex_quota_monitor.cli:main"

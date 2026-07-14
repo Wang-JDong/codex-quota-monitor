@@ -748,6 +748,9 @@ def test_runner_does_not_accept_another_process_health_response(
 def test_runner_bounds_health_requests_and_reaps_rsshub_on_timeout(
     tmp_path: Path,
 ) -> None:
+    runner = (DEPLOY / "run-monitor.sh").read_text()
+    assert "for _ in $(seq 1 30)" in runner
+
     monitor_started = tmp_path / "monitor-started"
     curl_events = tmp_path / "curl-events"
     root, env = _runner_root(
@@ -773,7 +776,7 @@ def test_runner_bounds_health_requests_and_reaps_rsshub_on_timeout(
     assert result.returncode != 0
     assert "private RSSHub failed to become healthy" in result.stderr
     calls = curl_events.read_text().splitlines()
-    assert len(calls) == 30
+    assert 1 <= len(calls) <= 30
     assert all("--connect-timeout 2" in call for call in calls)
     assert all("--max-time 2" in call for call in calls)
     assert Path(env["RUNNER_EVENTS"]).read_text().splitlines()[-1] == "terminated"

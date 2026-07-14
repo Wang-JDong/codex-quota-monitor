@@ -254,6 +254,70 @@ def test_dry_run_uses_a_fixed_resource_limited_transient_unit(tmp_path: Path) ->
     ]
 
 
+def test_reprocess_uses_a_fixed_resource_limited_transient_unit(tmp_path: Path) -> None:
+    script = (DEPLOY / "reprocess-post.sh").read_text()
+    runner = (DEPLOY / "run-monitor.sh").read_text()
+    assert "codex-quota-monitor-refresh" in script
+    assert "codex-quota-monitor-reprocess" in script
+    assert "reprocess-post" in runner
+
+    root = tmp_path / "project"
+    root.mkdir()
+    args_file = tmp_path / "systemd-run.args"
+    env = _test_environment(tmp_path / "commands", root)
+    env["SYSTEMD_RUN_ARGS_FILE"] = str(args_file)
+
+    result = subprocess.run(
+        [str(DEPLOY / "reprocess-post.sh"), "2076735790567338203"],
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    args = args_file.read_text().splitlines()
+    for expected in (
+        "--unit=codex-quota-monitor-reprocess",
+        "--uid=codex-monitor",
+        "--gid=codex-monitor",
+        f"--working-directory={root}",
+        f"--property=EnvironmentFile={root}/.env",
+        "--setenv=PORT=1200",
+        "--setenv=RSSHUB_BASE_URL=http://127.0.0.1:1200",
+        "--property=MemoryMax=384M",
+        "--property=CPUQuota=30%",
+        "--property=TimeoutStartSec=5min",
+        f"--property=ReadWritePaths={root}/data {root}/log",
+        f"{root}/deploy/run-monitor.sh",
+        "reprocess-post",
+        "2076735790567338203",
+    ):
+        assert expected in args
+    assert "--wait" in args
+    assert "--collect" in args
+    assert "--replace" not in args
+
+
+def test_reprocess_rejects_non_numeric_post_id_without_starting_unit(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    args_file = tmp_path / "systemd-run.args"
+    env = _test_environment(tmp_path / "commands", root)
+    env["SYSTEMD_RUN_ARGS_FILE"] = str(args_file)
+
+    result = subprocess.run(
+        [str(DEPLOY / "reprocess-post.sh"), "not-a-post"],
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+
+    assert result.returncode != 0
+    assert not args_file.exists()
+
+
 def _resource_systemctl(tmp_path: Path) -> Path:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()

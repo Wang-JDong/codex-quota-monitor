@@ -110,10 +110,10 @@ make status
 当抓取已经保存帖子、但旧规则把它判为未匹配时，先完成代码升级和 dry-run，再按帖子 ID 执行：
 
 ```bash
-sudo -u codex-monitor bash -c 'set -a; source /opt/codex-quota-monitor/.env; set +a; PYTHONPATH=/opt/codex-quota-monitor/src /usr/bin/python3 -m codex_quota_monitor reprocess-post "$1"' _ POST_ID
+sudo ./deploy/reprocess-post.sh POST_ID
 ```
 
-命令会重新从四个可信 feed 找到精确 ID、使用当前规则分类，并仅把数据库中已有的未匹配行提升为待发送。成功输出中的 `changed=true`、`sent=true` 表示本次已补发；重复执行必须返回 `changed=false`、`sent=false`，且 `delivery_attempts` 不增加。帖子不在当前 feed 或仍不匹配时，命令不修改数据库。不要用它导入任意 URL，也不要直接更新 SQLite。
+脚本在受限的一次性 systemd unit 中启动私有 RSSHub，然后重新从四个可信 feed 找到精确 ID、使用当前规则分类，并仅把数据库中已有的未匹配行提升为待发送。成功输出中的 `changed=true`、`sent=true` 表示本次已补发；重复执行必须返回 `changed=false`、`sent=false`，且 `delivery_attempts` 不增加。帖子不在当前 feed 或仍不匹配时，命令不修改数据库。不要用它导入任意 URL，也不要直接更新 SQLite。
 
 ## `health-resolve` 健康通知核对
 

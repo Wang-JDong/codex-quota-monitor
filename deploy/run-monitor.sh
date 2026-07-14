@@ -11,6 +11,7 @@ else
   ss_bin=/usr/bin/ss
 fi
 mode="${1:-run}"
+cli_args=("$mode")
 rsshub_pid=""
 monitor_pid=""
 
@@ -18,9 +19,19 @@ monitor_pid=""
 # invoked outside the installed unit.  The service and dry-run cgroups enforce
 # the independent process-level limits.
 case "$mode" in
-  run)
+  run|reprocess-post)
     PORT="${PORT:-1200}"
     RSSHUB_BASE_URL="${RSSHUB_BASE_URL:-http://127.0.0.1:$PORT}"
+    if [ "$mode" = reprocess-post ]; then
+      post_id="${2:-}"
+      case "$post_id" in
+        ""|*[!0-9]*)
+          echo "post ID must contain digits only" >&2
+          exit 2
+          ;;
+      esac
+      cli_args+=("$post_id")
+    fi
     ;;
   dry-run)
     # Reapply these values after EnvironmentFile processing so a dry-run can
@@ -132,7 +143,7 @@ test "$healthy" = true || {
 }
 
 PYTHONPATH="$root/src" "$python_bin" -m codex_quota_monitor \
-  --config "$root/config/sources.json" "$mode" &
+  --config "$root/config/sources.json" "${cli_args[@]}" &
 monitor_pid=$!
 wait "$monitor_pid"
 monitor_status=$?

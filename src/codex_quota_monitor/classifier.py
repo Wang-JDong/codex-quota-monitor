@@ -40,7 +40,10 @@ COMPLETED = re.compile(
     r"\breset\s+button\s+pressed\b",
     re.I,
 )
-IN_PROGRESS = re.compile(r"\b(?:are|'re)\s+resetting\b|\bis\s+resetting\b", re.I)
+IN_PROGRESS = re.compile(
+    r"\b(?:are|'re)(?:\s+once\s+again)?\s+resetting\b|\bis\s+resetting\b",
+    re.I,
+)
 PLANNED = re.compile(
     r"\bwill\s+(?:be\s+)?reset\b|\bwill\s+reset\b|"
     r"\bgive\s+us\b.{0,40}\bto\s+reset\b|"

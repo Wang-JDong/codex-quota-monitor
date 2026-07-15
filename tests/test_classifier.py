@@ -34,6 +34,11 @@ def post(
     [
         ("We have reset Codex usage limits across all plans.", ResetStatus.COMPLETED),
         ("We are resetting the Codex rate limits now.", ResetStatus.IN_PROGRESS),
+        (
+            "Hello. We have reached 8M active users across Codex and ChatGPT "
+            "Work. We are once again resetting the usage limits for all.",
+            ResetStatus.IN_PROGRESS,
+        ),
         ("Give us 24 hours to reset the Codex rate limits.", ResetStatus.PLANNED),
         ("We will credit Codex users one additional reset.", ResetStatus.PLANNED),
         ("Codex usage limits have been reset.", ResetStatus.COMPLETED),

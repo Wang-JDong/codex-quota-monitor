@@ -12,7 +12,7 @@
 
 | 组件 | 职责 | 生命周期/边界 |
 | --- | --- | --- |
-| systemd timer | 默认每小时触发 service | 常驻的只是 systemd 计时器 |
+| systemd timer | 默认每 30 分钟触发 service | 常驻的只是 systemd 计时器 |
 | `run-monitor.sh` | 启动 RSSHub、验证监听者、运行 Python、无条件清理 | 单次任务，最长 5 分钟 |
 | 项目私有 RSSHub | 使用 X `auth_token` 和 `UserTweets` 提供四个用户的顶层原创帖 | 仅 loopback；生产 `1200`，dry-run `1201` |
 | Query ID refresh | 从 X 官方前端包严格提取两个查询 ID | 单独 root 预处理；仅 RSSHub `dist-lib` 可写 |

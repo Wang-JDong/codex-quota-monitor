@@ -40,7 +40,7 @@ systemd-run --quiet --wait --pipe --collect \
 
 # A fixed transient unit fails safely if another backfill is already running.
 # The runner's listener ownership and SQLite lock also reject overlap with the
-# hourly production service.
+# scheduled production service.
 exec systemd-run --quiet --wait --pipe --collect \
   --unit=codex-quota-monitor-reprocess \
   --uid=codex-monitor \

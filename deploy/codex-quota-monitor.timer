@@ -1,8 +1,8 @@
 [Unit]
-Description=Run Codex quota monitor hourly
+Description=Run Codex quota monitor every 30 minutes
 
 [Timer]
-OnCalendar=hourly
+OnCalendar=*:0/30
 Persistent=true
 AccuracySec=1min
 Unit=codex-quota-monitor.service

@@ -483,7 +483,7 @@ def test_make_enable_runs_safety_checks_before_enabling_timer(tmp_path: Path) ->
 
 def test_timer_and_rollback_only_manage_project_units() -> None:
     timer = (DEPLOY / "codex-quota-monitor.timer").read_text()
-    assert "OnCalendar=hourly" in timer
+    assert "OnCalendar=*:0/30" in timer
     assert "Persistent=true" in timer
 
     makefile = Path("Makefile").read_text()

@@ -19,7 +19,7 @@ monitor_pid=""
 # invoked outside the installed unit.  The service and dry-run cgroups enforce
 # the independent process-level limits.
 case "$mode" in
-  run|reprocess-post)
+  run|reprocess-post|reprocess-unmatched)
     PORT="${PORT:-1200}"
     RSSHUB_BASE_URL="${RSSHUB_BASE_URL:-http://127.0.0.1:$PORT}"
     if [ "$mode" = reprocess-post ]; then
@@ -31,6 +31,8 @@ case "$mode" in
           ;;
       esac
       cli_args+=("$post_id")
+    elif [ "$mode" = reprocess-unmatched ]; then
+      cli_args+=("${@:2}")
     fi
     ;;
   dry-run)

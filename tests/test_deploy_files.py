@@ -188,6 +188,7 @@ def test_runner_always_kills_private_rsshub() -> None:
     assert 'PYTHONPATH="$root/src" "$python_bin" -m codex_quota_monitor' in runner
     assert "export LISTEN_INADDR_ANY=0" in runner
     assert "export NODE_OPTIONS=--max-old-space-size=256" in runner
+    assert "reprocess-unmatched" in runner
     assert '"$root/rsshub/server.mjs"' in runner
     assert "dist/index.mjs" not in runner
 
@@ -316,6 +317,85 @@ def test_reprocess_rejects_non_numeric_post_id_without_starting_unit(
 
     assert result.returncode != 0
     assert not args_file.exists()
+
+
+def test_reprocess_unmatched_is_capped_isolated_and_bounded(tmp_path: Path) -> None:
+    script = (DEPLOY / "reprocess-unmatched.sh").read_text()
+    assert "set -euo pipefail" in script
+    assert 'test "$(id -u)" = 0' in script
+    assert "codex-quota-monitor-refresh" in script
+    assert "codex-quota-monitor-reprocess" in script
+    assert "RSSHUB_BASE_URL=http://127.0.0.1:1200" in script
+    for property_name in (
+        "MemoryMax=384M",
+        "CPUQuota=30%",
+        "NoNewPrivileges=yes",
+        "PrivateTmp=yes",
+        "ProtectSystem=strict",
+        "ProtectHome=yes",
+    ):
+        assert property_name in script
+    assert "--days" in script
+    assert "--limit" in script
+    assert "reprocess-unmatched" in script
+    assert ":1200" in script
+    assert ":1201" not in script
+
+    root = tmp_path / "project"
+    root.mkdir()
+    args_file = tmp_path / "systemd-run.args"
+    env = _test_environment(tmp_path / "commands", root)
+    env["SYSTEMD_RUN_ARGS_FILE"] = str(args_file)
+
+    result = subprocess.run(
+        [str(DEPLOY / "reprocess-unmatched.sh"), "--days", "7", "--limit", "100"],
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    args = args_file.read_text().splitlines()
+    for expected in (
+        "--unit=codex-quota-monitor-reprocess",
+        "--uid=codex-monitor",
+        "--gid=codex-monitor",
+        f"--working-directory={root}",
+        f"--property=EnvironmentFile={root}/.env",
+        "--setenv=PORT=1200",
+        "--setenv=RSSHUB_BASE_URL=http://127.0.0.1:1200",
+        "--property=MemoryMax=384M",
+        "--property=CPUQuota=30%",
+        f"--property=ReadWritePaths={root}/data {root}/log",
+        f"{root}/deploy/run-monitor.sh",
+        "reprocess-unmatched",
+        "--days",
+        "7",
+        "--limit",
+        "100",
+    ):
+        assert expected in args
+    assert "--replace" not in args
+
+
+def test_reprocess_unmatched_rejects_invalid_bounds_without_starting_unit(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    args_file = tmp_path / "systemd-run.args"
+    env = _test_environment(tmp_path / "commands", root)
+    env["SYSTEMD_RUN_ARGS_FILE"] = str(args_file)
+
+    for values in (("--days", "0"), ("--days", "32"), ("--limit", "0"), ("--limit", "101"), ("--days", "nope")):
+        result = subprocess.run(
+            [str(DEPLOY / "reprocess-unmatched.sh"), *values],
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+        assert result.returncode != 0
+        assert not args_file.exists()
 
 
 def _resource_systemctl(tmp_path: Path) -> Path:

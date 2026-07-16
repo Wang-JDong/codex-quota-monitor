@@ -115,6 +115,23 @@ sudo ./deploy/reprocess-post.sh POST_ID
 
 脚本在受限的一次性 systemd unit 中启动私有 RSSHub，然后重新从四个可信 feed 找到精确 ID、使用当前规则分类，并仅把数据库中已有的未匹配行提升为待发送。成功输出中的 `changed=true`、`sent=true` 表示本次已补发；重复执行必须返回 `changed=false`、`sent=false`，且 `delivery_attempts` 不增加。帖子不在当前 feed 或仍不匹配时，命令不修改数据库。不要用它导入任意 URL，也不要直接更新 SQLite。
 
+## `reprocess-unmatched` 有界补处理
+
+规则升级后需要覆盖最近一段可能漏报的帖子时，使用固定上限的批量命令：
+
+```bash
+sudo ./deploy/reprocess-unmatched.sh --days 7 --limit 100
+```
+
+输出 JSON 字段含义：
+
+- `scanned`：窗口内从 SQLite 读取并尝试在当前四个 feed 中定位的未匹配行数。
+- `changed`：被新规则提升为待投递候选的行数。
+- `sent`：本次成功完成飞书投递的行数。
+- `skipped`：不在当前 feed、仍为负例或发生并发状态变化的行数。
+
+命令只抓取每个来源一次，窗口限制为 1–31 天、批量限制为 1–100 条，并使用与生产任务相同的 384 MiB / 30% CPU 隔离边界。重复执行不会重新发送已匹配或已发送帖子；首次执行后应检查 `possible_reset` 卡片的原文和证据，人工确认是否属于额度重置。不要直接编辑 SQLite，也不要扩大可信账号白名单来“补抓”。
+
 ## `health-resolve` 健康通知核对
 
 健康 `alert` 或 `recovered` 在超时、断连、5xx 或响应无法确认后会进入 `uncertain`，下一轮和重启后都不会自动重发。先在飞书群按标题核对，然后执行下列其中一条：

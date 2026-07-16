@@ -17,10 +17,10 @@
 | 项目私有 RSSHub | 使用 X `auth_token` 和 `UserTweets` 提供四个用户的顶层原创帖 | 仅 loopback；生产 `1200`，dry-run `1201` |
 | Query ID refresh | 从 X 官方前端包严格提取两个查询 ID | 单独 root 预处理；仅 RSSHub `dist-lib` 可写 |
 | `RssHubClient` | 抓取、重试、JSON/XML 解析、完整正文选择和原帖作者/链接校验 | Python 3.12 标准库 |
-| 确定性分类器 | 白名单、产品、限制、普通重置、banked reset 和排除语义 | 无网络、无 LLM |
+| 确定性分类器 | 白名单、产品、限制、动作/时间证据、五类状态和排除语义 | 无网络、无 LLM |
 | `Store` | 基线、去重、投递状态和健康状态 | SQLite/WAL，生产持久化 |
 | `FeishuClient` | 签名并发送业务/健康卡片 | 只访问配置的 Webhook |
-| CLI | `run`、`dry-run`、`status`、`test-notification`、`reprocess-post`、`delivery-resolve`、`health-resolve` | 管理员显式调用 |
+| CLI | `run`、`dry-run`、`status`、`test-notification`、`reprocess-post`、`reprocess-unmatched`、`delivery-resolve`、`health-resolve` | 管理员显式调用 |
 
 ## 单次运行时序
 
@@ -66,13 +66,13 @@ dry-run 走同一个抓取与分类路径，但被 transient unit 强制改用 `
 
 SQLite 包含三类表：
 
-- `posts`：以 `post_id` 为主键，保存来源、原文、发布时间、链接、引用元数据、分类决策、内容哈希、投递状态、尝试次数和安全错误标签。引用元数据（包括 `quoted_text`）仅用于审计和展示上下文，永不作为分类匹配证据；转发也不作为证据。
+- `posts`：以 `post_id` 为主键，保存来源、原文、发布时间、链接、引用元数据、分类决策、分类器版本、置信度、证据、内容哈希、投递状态、尝试次数和安全错误标签。引用元数据（包括 `quoted_text`）仅用于审计和展示上下文，永不作为分类匹配证据；转发也不作为证据。
 - `sources`：以 handle 为主键，保存是否已基线化、最后成功时间和最后安全错误。
 - `state`：键值状态，用于连续全失败轮数、健康告警激活标记，以及健康迁移的 epoch、投递状态、尝试次数和安全错误标签。
 
 SQLite 不存储 X Cookie、飞书 Webhook 或飞书签名密钥。
 
-RSSHub 标题可能被截断；解析器在 description 的非引用正文更长时优先保存该正文。`reprocess-post` 只允许把已存在的 `matched=0` 行原子提升为 `pending`，同时替换完整正文和新分类；已匹配或已发送行不会再次进入队列。
+RSSHub 标题可能被截断；解析器在 description 的非引用正文更长时优先保存该正文。`reprocess-post` 和有界的 `reprocess-unmatched` 只允许把已存在的 `matched=0` 行原子提升为 `pending`，同时替换完整正文和新分类；已匹配或已发送行不会再次进入队列。低置信度 `possible_reset` 不声称额度已经确认恢复。
 
 ## 投递状态机
 

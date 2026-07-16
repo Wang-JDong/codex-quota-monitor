@@ -113,7 +113,17 @@ CPUQuotaPerSecUSec=300ms
 
 它们分别对应 384 MiB 和 unit 中的 `CPUQuota=30%`。校验失败时返回非零状态，禁止启用 timer。
 
-## 9. 启用小时定时器
+## 9. 规则升级后的有界补处理
+
+代码升级并完成 dry-run 后，如需把最近漏报的未匹配帖子按新规则补处理，执行：
+
+```bash
+sudo ./deploy/reprocess-unmatched.sh --days 7 --limit 100
+```
+
+该命令只扫描最近 7 天、最多 100 条 `matched=0` 记录；每个来源只抓取一次，成功候选才进入现有的原子投递状态机。输出中的 `scanned`、`changed`、`sent`、`skipped` 可用于审计，重复运行必须不新增已发送卡片。低置信度 `possible_reset` 会以橙色卡片标注“可能是额度重置，请确认”，应先核对原文再决定是否需要人工处理。禁止直接改 SQLite。
+
+## 10. 启用 30 分钟定时器
 
 ```bash
 make enable
@@ -130,7 +140,7 @@ systemctl list-timers codex-quota-monitor.timer
 tail -n 100 /var/log/codex-quota-monitor/monitor.log
 ```
 
-验收标准：日志不包含任何秘密；timer 显示下一次运行；没有历史业务卡片；任务结束后 `1200`、`1201` 和项目进程全部消失；受保护服务完全未变。
+验收标准：日志不包含任何秘密；timer 显示每 30 分钟的下一次运行；没有历史业务卡片；任务结束后 `1200`、`1201` 和项目进程全部消失；受保护服务完全未变。
 
 ## 更新与重新部署
 

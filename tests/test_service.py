@@ -195,6 +195,100 @@ def test_reprocess_unmatched_counts_still_negative_and_continues_after_source_er
     assert len(feishu.sent) == 1
 
 
+def test_current_feed_refreshes_old_unmatched_rule_version_once(tmp_path) -> None:
+    source = Source("OpenAI")
+    full = post("versioned")
+    feed = FakeFeed({"OpenAI": []})
+    service, store, feishu = service_for(tmp_path, (source,), feed)
+    service.run()  # establish the source baseline
+    stale = Post(full.post_id, full.author, "old text", full.published_at, full.url)
+    store.record_decision(
+        stale,
+        Decision(False, None, "reset_state_not_explicit"),
+        classifier_version="1",
+    )
+    feed.posts["OpenAI"] = [full]
+
+    first = service.run()
+    second = service.run()
+
+    assert first.new_posts == 0
+    assert first.matched_posts == 1
+    assert first.sent_posts == 1
+    assert second.matched_posts == 0
+    assert second.sent_posts == 0
+    assert len(feishu.sent) == 1
+
+
+def test_current_feed_refreshes_negative_version_without_delivery(tmp_path) -> None:
+    source = Source("OpenAI")
+    negative = Post(
+        "negative-version",
+        "OpenAI",
+        "Codex now has higher rate limits.",
+        datetime.now(UTC),
+        "https://x.com/OpenAI/status/negative-version",
+    )
+    feed = FakeFeed({"OpenAI": []})
+    service, store, feishu = service_for(tmp_path, (source,), feed)
+    service.run()
+    store.record_decision(
+        negative,
+        Decision(False, None, "old"),
+        classifier_version="1",
+    )
+    feed.posts["OpenAI"] = [negative]
+
+    summary = service.run()
+
+    assert summary.matched_posts == 0
+    assert summary.sent_posts == 0
+    assert feishu.sent == []
+    with store._connect() as connection:
+        row = connection.execute(
+            "SELECT matched, classification_version, delivery_state FROM posts "
+            "WHERE post_id = ?",
+            (negative.post_id,),
+        ).fetchone()
+    assert tuple(row) == (0, "3", None)
+
+
+def test_current_feed_never_reclassifies_matched_or_sent_rows(tmp_path) -> None:
+    source = Source("OpenAI")
+    matched = post("already-sent")
+    feed = FakeFeed({"OpenAI": []})
+    service, store, feishu = service_for(tmp_path, (source,), feed)
+    service.run()
+    store.record_decision(
+        matched,
+        Decision(
+            True,
+            ResetStatus.COMPLETED,
+            "explicit_codex_limit_reset",
+            ("product", "limit", "reset", "completed"),
+        ),
+        classifier_version="1",
+    )
+    store.claim_delivery(matched.post_id)
+    store.mark_delivery_sent(matched.post_id)
+    feed.posts["OpenAI"] = [
+        Post(
+            matched.post_id,
+            matched.author,
+            "Codex now has higher rate limits.",
+            matched.published_at,
+            matched.url,
+        )
+    ]
+
+    summary = service.run()
+
+    assert summary.matched_posts == 0
+    assert summary.sent_posts == 0
+    assert len(feishu.sent) == 0
+    assert store.status()["sent"] == 1
+
+
 def test_explicit_retryable_pending_failure_is_retried_next_run(tmp_path) -> None:
     class FailOnceFeishu(FakeFeishu):
         def __init__(self) -> None:

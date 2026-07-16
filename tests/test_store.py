@@ -328,6 +328,30 @@ def test_refresh_unmatched_updates_classification_without_delivery(tmp_path) -> 
     assert row == (0, "excluded_language", "low", '["product", "limit"]', "3")
 
 
+def test_reclassification_version_only_applies_to_unmatched_rows(tmp_path) -> None:
+    store = Store(tmp_path / "monitor.db", 3)
+    store.initialize()
+    unmatched = sample("version-unmatched")
+    matched = sample("version-matched")
+    store.record_decision(
+        unmatched,
+        Decision(False, None, "old"),
+        classifier_version="1",
+    )
+    store.record_decision(
+        matched,
+        Decision(True, ResetStatus.COMPLETED, "explicit", ("reset",)),
+        classifier_version="1",
+    )
+
+    assert store.needs_reclassification(unmatched.post_id, "3") is True
+    assert store.needs_reclassification(unmatched.post_id, "1") is False
+    assert store.needs_reclassification(matched.post_id, "3") is False
+    store.claim_delivery(matched.post_id)
+    store.mark_delivery_sent(matched.post_id)
+    assert store.needs_reclassification(matched.post_id, "0") is False
+
+
 def test_promotion_rejects_nonmatch_and_missing_post(tmp_path) -> None:
     store = Store(tmp_path / "monitor.db", 3)
     store.initialize()

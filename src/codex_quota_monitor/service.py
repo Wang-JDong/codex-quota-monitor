@@ -222,11 +222,36 @@ class MonitorService:
                 self.store.baseline_source(source.handle, posts)
                 continue
 
-            for item in self.store.unseen(posts):
-                new_count += 1
+            unseen = self.store.unseen(posts)
+            unseen_ids = {item.post_id for item in unseen}
+            for item in posts:
+                if item.post_id in unseen_ids:
+                    new_count += 1
+                    decision = classify(item, self.trusted)
+                    self.store.record_decision(item, decision)
+                    if not decision.matched:
+                        continue
+                    matched += 1
+                    if delivery_available:
+                        if self._send_business(item, decision):
+                            sent += 1
+                        else:
+                            delivery_available = False
+                    continue
+
+                if not self.store.needs_reclassification(
+                    item.post_id, CLASSIFIER_VERSION
+                ):
+                    continue
                 decision = classify(item, self.trusted)
-                self.store.record_decision(item, decision)
                 if not decision.matched:
+                    self.store.refresh_unmatched(
+                        item, decision, CLASSIFIER_VERSION
+                    )
+                    continue
+                if not self.store.refresh_unmatched(
+                    item, decision, CLASSIFIER_VERSION
+                ):
                     continue
                 matched += 1
                 if delivery_available:

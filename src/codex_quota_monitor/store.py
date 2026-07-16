@@ -230,6 +230,21 @@ class Store:
                 is None
             ]
 
+    def needs_reclassification(
+        self, post_id: str, classifier_version: str
+    ) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT matched, classification_version FROM posts "
+                "WHERE post_id = ?",
+                (post_id,),
+            ).fetchone()
+        return bool(
+            row
+            and not row["matched"]
+            and row["classification_version"] != classifier_version
+        )
+
     @staticmethod
     def _post_from_row(row: sqlite3.Row) -> Post:
         return Post(

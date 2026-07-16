@@ -14,6 +14,7 @@ from codex_quota_monitor.feishu import (
     notification_for_post,
 )
 from codex_quota_monitor.models import (
+    Confidence,
     Decision,
     HealthTransition,
     Notification,
@@ -131,6 +132,36 @@ def test_banked_reset_notification_uses_distinct_accurate_copy() -> None:
     assert "**状态：** 可保存重置次数已发放" in note.body
     assert "不会自动表示当前额度已恢复" in note.body
     assert banked.text in note.body
+
+
+def test_possible_reset_notification_is_explicit_and_includes_evidence() -> None:
+    possible = Post(
+        "2077607697487188198",
+        "thsottiaux",
+        "Codex usage limits may be restored after the team finishes checking.",
+        datetime(2026, 7, 16, 4, 14, tzinfo=UTC),
+        "https://x.com/thsottiaux/status/2077607697487188198",
+    )
+    decision = Decision(
+        True,
+        ResetStatus.POSSIBLE_RESET,
+        "possible_codex_limit_reset",
+        ("product", "limit", "reset", "possible_reset"),
+        Confidence.LOW,
+        ("product", "limit", "action", "recovery"),
+    )
+
+    note = notification_for_post(possible, decision)
+
+    assert note.title == "Codex 额度重置通知｜可能是额度重置，请确认"
+    assert "可能是额度重置，请确认" in note.body
+    assert "possible_reset" in note.body
+    assert "product, limit, action, recovery" in note.body
+    assert "2026-07-16 12:14（北京时间）" in note.body
+    assert possible.url in note.body
+    assert possible.text in note.body
+    assert note.template == "orange"
+    assert note.url == possible.url
 
 
 def test_health_notifications_are_clear_and_have_no_link() -> None:

@@ -17,6 +17,7 @@ LABELS = {
     ResetStatus.IN_PROGRESS: "正在重置",
     ResetStatus.PLANNED: "计划重置",
     ResetStatus.BANKED_AVAILABLE: "可保存重置次数已发放",
+    ResetStatus.POSSIBLE_RESET: "可能是额度重置，请确认",
 }
 
 
@@ -47,6 +48,22 @@ def notification_for_post(post: Post, decision: Decision) -> Notification:
         if decision.status is ResetStatus.BANKED_AVAILABLE
         else ""
     )
+    if decision.status is ResetStatus.POSSIBLE_RESET:
+        evidence = ", ".join(decision.candidate_reason) or "未记录"
+        body = (
+            f"**判断：** {label}\n"
+            "这是一条低置信度候选提醒，不代表额度已经确认重置。\n"
+            f"**分类：** possible_reset\n"
+            f"**证据：** {evidence}\n"
+            f"**来源：** @{post.author}\n"
+            f"**时间：** {beijing_time}（北京时间）\n"
+            f"**原帖链接：** {post.url}\n\n"
+            f"**官方原文：**\n{post.text[:1500]}"
+        )
+        return Notification(
+            f"Codex 额度重置通知｜{label}", body, "orange", post.url
+        )
+
     body = (
         f"**状态：** {label}\n"
         f"{banked_note}"

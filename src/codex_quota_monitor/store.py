@@ -9,7 +9,8 @@ from pathlib import Path
 import sqlite3
 from typing import Iterator
 
-from .models import Decision, HealthTransition, Post, ResetStatus
+from .classifier import CLASSIFIER_VERSION
+from .models import Confidence, Decision, HealthTransition, Post, ResetStatus
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,9 @@ class Store:
                     attempt_count INTEGER NOT NULL DEFAULT 0,
                     last_delivery_error TEXT,
                     content_hash TEXT,
+                    classification_version TEXT NOT NULL DEFAULT '1',
+                    confidence TEXT NOT NULL DEFAULT 'high',
+                    candidate_reason TEXT NOT NULL DEFAULT '[]',
                     first_seen_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS sources (
@@ -93,6 +97,18 @@ class Store:
                     "ALTER TABLE posts ADD COLUMN last_delivery_error TEXT"
                 ),
                 "content_hash": "ALTER TABLE posts ADD COLUMN content_hash TEXT",
+                "classification_version": (
+                    "ALTER TABLE posts ADD COLUMN classification_version "
+                    "TEXT NOT NULL DEFAULT '1'"
+                ),
+                "confidence": (
+                    "ALTER TABLE posts ADD COLUMN confidence "
+                    "TEXT NOT NULL DEFAULT 'high'"
+                ),
+                "candidate_reason": (
+                    "ALTER TABLE posts ADD COLUMN candidate_reason "
+                    "TEXT NOT NULL DEFAULT '[]'"
+                ),
             }
             for name, statement in migrations.items():
                 if name not in columns:
@@ -214,18 +230,39 @@ class Store:
                 is None
             ]
 
+    @staticmethod
+    def _post_from_row(row: sqlite3.Row) -> Post:
+        return Post(
+            row["post_id"],
+            row["author"],
+            row["text"],
+            datetime.fromisoformat(row["published_at"]),
+            row["url"],
+            row["quoted_text"],
+            row["quoted_author"],
+            bool(row["is_retweet"]),
+        )
+
     def _insert(
-        self, connection: sqlite3.Connection, post: Post, decision: Decision
+        self,
+        connection: sqlite3.Connection,
+        post: Post,
+        decision: Decision,
+        classifier_version: str = CLASSIFIER_VERSION,
     ) -> None:
         delivery_state = DeliveryState.PENDING if decision.matched else None
-        content_hash = self._content_hash(post, decision) if decision.matched else None
+        content_hash = (
+            self._content_hash(post, decision, classifier_version)
+            if decision.matched
+            else None
+        )
         connection.execute(
             "INSERT INTO posts ("
             "post_id, author, text, quoted_text, quoted_author, is_retweet, "
             "published_at, url, matched, status, reason, matched_rules, pushed, "
             "delivery_state, attempt_count, last_delivery_error, content_hash, "
-            "first_seen_at"
-            ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, NULL, ?, ?) "
+            "classification_version, confidence, candidate_reason, first_seen_at"
+            ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, NULL, ?, ?, ?, ?, ?) "
             "ON CONFLICT(post_id) DO NOTHING",
             (
                 post.post_id,
@@ -242,12 +279,19 @@ class Store:
                 json.dumps(decision.matched_rules),
                 delivery_state,
                 content_hash,
+                classifier_version,
+                decision.confidence.value,
+                json.dumps(decision.candidate_reason),
                 datetime.now(UTC).isoformat(),
             ),
         )
 
     @staticmethod
-    def _content_hash(post: Post, decision: Decision) -> str:
+    def _content_hash(
+        post: Post,
+        decision: Decision,
+        classifier_version: str = CLASSIFIER_VERSION,
+    ) -> str:
         canonical = json.dumps(
             {
                 "post_id": post.post_id,
@@ -258,6 +302,9 @@ class Store:
                 "status": decision.status.value if decision.status else None,
                 "reason": decision.reason,
                 "matched_rules": decision.matched_rules,
+                "classification_version": classifier_version,
+                "confidence": decision.confidence.value,
+                "candidate_reason": decision.candidate_reason,
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -277,6 +324,9 @@ class Store:
                 "status": row["status"],
                 "reason": row["reason"],
                 "matched_rules": tuple(json.loads(row["matched_rules"])),
+                "classification_version": row["classification_version"],
+                "confidence": row["confidence"],
+                "candidate_reason": tuple(json.loads(row["candidate_reason"])),
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -284,21 +334,32 @@ class Store:
         ).encode()
         return hashlib.sha256(canonical).hexdigest()
 
-    def record_decision(self, post: Post, decision: Decision) -> None:
+    def record_decision(
+        self,
+        post: Post,
+        decision: Decision,
+        classifier_version: str = CLASSIFIER_VERSION,
+    ) -> None:
         with self._connect() as connection:
-            self._insert(connection, post, decision)
+            self._insert(connection, post, decision, classifier_version)
 
-    def promote_unmatched(self, post: Post, decision: Decision) -> bool:
+    def promote_unmatched(
+        self,
+        post: Post,
+        decision: Decision,
+        classifier_version: str = CLASSIFIER_VERSION,
+    ) -> bool:
         if not decision.matched or decision.status is None:
             raise ValueError("promotion requires a matched decision with status")
-        content_hash = self._content_hash(post, decision)
+        content_hash = self._content_hash(post, decision, classifier_version)
         with self._connect() as connection:
             result = connection.execute(
                 "UPDATE posts SET author = ?, text = ?, quoted_text = ?, "
                 "quoted_author = ?, is_retweet = ?, published_at = ?, url = ?, "
                 "matched = 1, status = ?, reason = ?, matched_rules = ?, pushed = 0, "
                 "delivery_state = ?, attempt_count = 0, last_delivery_error = NULL, "
-                "content_hash = ? WHERE post_id = ? AND matched = 0",
+                "content_hash = ?, classification_version = ?, confidence = ?, "
+                "candidate_reason = ? WHERE post_id = ? AND matched = 0",
                 (
                     post.author,
                     post.text,
@@ -312,10 +373,59 @@ class Store:
                     json.dumps(decision.matched_rules),
                     DeliveryState.PENDING,
                     content_hash,
+                    classifier_version,
+                    decision.confidence.value,
+                    json.dumps(decision.candidate_reason),
                     post.post_id,
                 ),
             )
             return result.rowcount == 1
+
+    def refresh_unmatched(
+        self, post: Post, decision: Decision, classifier_version: str
+    ) -> bool:
+        """Refresh an unmatched row, promoting it when the new decision matches."""
+
+        if decision.matched:
+            return self.promote_unmatched(post, decision, classifier_version)
+        with self._connect() as connection:
+            result = connection.execute(
+                "UPDATE posts SET author = ?, text = ?, quoted_text = ?, "
+                "quoted_author = ?, is_retweet = ?, published_at = ?, url = ?, "
+                "matched = 0, status = NULL, reason = ?, matched_rules = ?, "
+                "classification_version = ?, confidence = ?, candidate_reason = ?, "
+                "content_hash = NULL WHERE post_id = ? AND matched = 0",
+                (
+                    post.author,
+                    post.text,
+                    post.quoted_text,
+                    post.quoted_author,
+                    int(post.is_retweet),
+                    post.published_at.isoformat(),
+                    post.url,
+                    decision.reason,
+                    json.dumps(decision.matched_rules),
+                    classifier_version,
+                    decision.confidence.value,
+                    json.dumps(decision.candidate_reason),
+                    post.post_id,
+                ),
+            )
+            return result.rowcount == 1
+
+    def unmatched_since(self, since: datetime, limit: int) -> list[Post]:
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        if since.tzinfo is None:
+            raise ValueError("since must be timezone-aware")
+        timestamp = since.astimezone(UTC).isoformat()
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM posts WHERE matched = 0 AND published_at >= ? "
+                "ORDER BY published_at, post_id LIMIT ?",
+                (timestamp, limit),
+            ).fetchall()
+        return [self._post_from_row(row) for row in rows]
 
     def pending(self) -> list[StoredMatch]:
         with self._connect() as connection:
@@ -326,21 +436,14 @@ class Store:
             ).fetchall()
         return [
             StoredMatch(
-                Post(
-                    row["post_id"],
-                    row["author"],
-                    row["text"],
-                    datetime.fromisoformat(row["published_at"]),
-                    row["url"],
-                    row["quoted_text"],
-                    row["quoted_author"],
-                    bool(row["is_retweet"]),
-                ),
+                self._post_from_row(row),
                 Decision(
                     True,
                     ResetStatus(row["status"]),
                     row["reason"],
                     tuple(json.loads(row["matched_rules"])),
+                    Confidence(row["confidence"]),
+                    tuple(json.loads(row["candidate_reason"])),
                 ),
             )
             for row in rows

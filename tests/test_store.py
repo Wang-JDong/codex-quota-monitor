@@ -3,7 +3,13 @@ import sqlite3
 
 import pytest
 
-from codex_quota_monitor.models import Decision, HealthTransition, Post, ResetStatus
+from codex_quota_monitor.models import (
+    Confidence,
+    Decision,
+    HealthTransition,
+    Post,
+    ResetStatus,
+)
 from codex_quota_monitor.store import DeliveryState, Store
 
 
@@ -223,6 +229,103 @@ def test_promotes_existing_unmatched_post_once_with_fresh_content(tmp_path) -> N
     assert len(pending) == 1
     assert pending[0].post.text == refreshed.text
     assert pending[0].decision == decision
+
+
+def test_legacy_posts_gain_classification_metadata_columns(tmp_path) -> None:
+    database = tmp_path / "legacy.db"
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE posts (
+                post_id TEXT PRIMARY KEY, author TEXT NOT NULL, text TEXT NOT NULL,
+                quoted_text TEXT NOT NULL, quoted_author TEXT NOT NULL,
+                is_retweet INTEGER NOT NULL, published_at TEXT NOT NULL,
+                url TEXT NOT NULL, matched INTEGER NOT NULL, status TEXT,
+                reason TEXT NOT NULL, matched_rules TEXT NOT NULL,
+                pushed INTEGER NOT NULL DEFAULT 0, first_seen_at TEXT NOT NULL
+            );
+            CREATE TABLE sources (handle TEXT PRIMARY KEY, baselined INTEGER NOT NULL DEFAULT 0,
+                last_success_at TEXT, last_error TEXT);
+            CREATE TABLE state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            """
+        )
+
+    Store(database, 3).initialize()
+
+    with sqlite3.connect(database) as connection:
+        columns = {
+            row[1]: row[4]
+            for row in connection.execute("PRAGMA table_info(posts)")
+        }
+
+    assert columns["classification_version"] == "'1'"
+    assert columns["confidence"] == "'high'"
+    assert columns["candidate_reason"] == "'[]'"
+
+
+def test_low_confidence_decision_round_trips_through_pending(tmp_path) -> None:
+    store = Store(tmp_path / "monitor.db", 3)
+    store.initialize()
+    decision = Decision(
+        True,
+        ResetStatus.POSSIBLE_RESET,
+        "possible_codex_limit_reset",
+        ("product", "limit", "reset", "possible_reset"),
+        Confidence.LOW,
+        ("product", "limit", "action"),
+    )
+
+    store.record_decision(sample(), decision)
+
+    assert store.pending()[0].decision == decision
+
+
+def test_unmatched_since_is_timestamp_filtered_and_bounded(tmp_path) -> None:
+    store = Store(tmp_path / "monitor.db", 3)
+    store.initialize()
+    base = datetime(2026, 7, 10, tzinfo=UTC)
+    posts = [
+        Post(str(index), "OpenAI", "not relevant", base.replace(day=10 + index), f"https://x/{index}")
+        for index in range(1, 4)
+    ]
+    for item in posts:
+        store.record_decision(item, Decision(False, None, "not relevant"))
+
+    result = store.unmatched_since(base.replace(day=13), limit=1)
+
+    assert [item.post_id for item in result] == ["3"]
+
+
+def test_refresh_unmatched_updates_classification_without_delivery(tmp_path) -> None:
+    store = Store(tmp_path / "monitor.db", 3)
+    store.initialize()
+    original = sample("refresh")
+    store.record_decision(original, Decision(False, None, "missing:action"))
+    refreshed = Post(
+        original.post_id,
+        original.author,
+        "Codex usage limits may be restored after checking.",
+        original.published_at,
+        original.url,
+    )
+    decision = Decision(
+        False,
+        None,
+        "excluded_language",
+        ("exclude",),
+        Confidence.LOW,
+        ("product", "limit"),
+    )
+
+    assert store.refresh_unmatched(refreshed, decision, "3") is True
+    assert store.pending() == []
+    with sqlite3.connect(store.path) as connection:
+        row = connection.execute(
+            "SELECT matched, reason, confidence, candidate_reason, classification_version "
+            "FROM posts WHERE post_id = ?",
+            (original.post_id,),
+        ).fetchone()
+    assert row == (0, "excluded_language", "low", '["product", "limit"]', "3")
 
 
 def test_promotion_rejects_nonmatch_and_missing_post(tmp_path) -> None:

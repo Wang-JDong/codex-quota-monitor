@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import pytest
 
 from codex_quota_monitor.classifier import classify
-from codex_quota_monitor.models import Post, ResetStatus
+from codex_quota_monitor.models import Confidence, Post, ResetStatus
 
 
 TRUSTED = frozenset({"openai", "openaidevs", "thsottiaux", "sama"})
@@ -57,6 +57,42 @@ def test_matches_explicit_simple_past_reset_announcement() -> None:
     decision = classify(post("We reset Codex rate limits for everyone."), TRUSTED)
 
     assert decision.status is ResetStatus.COMPLETED
+
+
+def test_current_real_world_reset_language_is_planned() -> None:
+    decision = classify(
+        post(
+            "Another reset for our Codex and ChatGPT Work users. "
+            "Actually hit 9M active users way earlier today, but then got "
+            "distracted by the approximately millions of things the team is "
+            "doing to keep the systems up and reliable. Should have that sweet "
+            "100% weekly usage limit back in a few minutes."
+        ),
+        TRUSTED,
+    )
+
+    assert decision.matched is True
+    assert decision.status is ResetStatus.PLANNED
+    assert decision.confidence is Confidence.HIGH
+    assert {"product", "limit", "action", "time"}.issubset(
+        set(decision.candidate_reason)
+    )
+
+
+def test_unfamiliar_trusted_reset_context_becomes_possible_reset() -> None:
+    decision = classify(
+        post(
+            "Codex usage limits may be restored after the team finishes checking."
+        ),
+        TRUSTED,
+    )
+
+    assert decision.matched is True
+    assert decision.status is ResetStatus.POSSIBLE_RESET
+    assert decision.confidence is Confidence.LOW
+    assert {"product", "limit", "action"}.issubset(
+        set(decision.candidate_reason)
+    )
 
 
 def test_matches_explicit_banked_reset_grant_as_distinct_status() -> None:

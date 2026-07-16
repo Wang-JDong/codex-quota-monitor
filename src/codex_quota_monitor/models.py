@@ -8,6 +8,12 @@ class ResetStatus(StrEnum):
     IN_PROGRESS = "in_progress"
     PLANNED = "planned"
     BANKED_AVAILABLE = "banked_available"
+    POSSIBLE_RESET = "possible_reset"
+
+
+class Confidence(StrEnum):
+    HIGH = "high"
+    LOW = "low"
 
 
 class HealthTransition(StrEnum):
@@ -40,6 +46,8 @@ class Decision:
     status: ResetStatus | None
     reason: str
     matched_rules: tuple[str, ...] = ()
+    confidence: Confidence = Confidence.HIGH
+    candidate_reason: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

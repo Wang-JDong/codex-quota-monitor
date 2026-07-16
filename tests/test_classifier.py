@@ -95,6 +95,51 @@ def test_unfamiliar_trusted_reset_context_becomes_possible_reset() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("text", "status", "reason", "confidence"),
+    [
+        (
+            "We are once again resetting the usage limits for all Codex users.",
+            ResetStatus.IN_PROGRESS,
+            "explicit_codex_limit_reset",
+            Confidence.HIGH,
+        ),
+        (
+            "Codex usage limits are back to 100%.",
+            ResetStatus.COMPLETED,
+            "explicit_codex_limit_reset",
+            Confidence.HIGH,
+        ),
+        (
+            "Another reset is coming in a few hours for ChatGPT Work and Codex.",
+            ResetStatus.PLANNED,
+            "explicit_codex_limit_reset",
+            Confidence.HIGH,
+        ),
+        (
+            "Codex may have its weekly usage restored after the investigation.",
+            ResetStatus.POSSIBLE_RESET,
+            "possible_codex_limit_reset",
+            Confidence.LOW,
+        ),
+    ],
+)
+def test_classifies_reset_state_with_stable_reason_and_confidence(
+    text: str,
+    status: ResetStatus,
+    reason: str,
+    confidence: Confidence,
+) -> None:
+    decision = classify(post(text), TRUSTED)
+
+    assert decision.matched is True
+    assert decision.status is status
+    assert decision.reason == reason
+    assert decision.confidence is confidence
+    assert "product" in decision.candidate_reason
+    assert "action" in decision.candidate_reason
+
+
 def test_matches_explicit_banked_reset_grant_as_distinct_status() -> None:
     text = (
         "Thank you to the 7M active users who are now using Codex and ChatGPT "

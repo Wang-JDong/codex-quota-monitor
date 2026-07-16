@@ -386,6 +386,11 @@ Expected: all tests pass and every command exits 0.
 Files:
 - No source files; deploy the committed tree using existing safe procedures.
 
+Before running the commands below, export the VPS address locally (do not commit
+the value to the repository):
+
+    export VPS_HOST="<your-vps-host>"
+
 - [ ] Step 1: Push and watch GitHub Actions.
 
     git push origin main
@@ -396,7 +401,7 @@ Do not deploy if CI is not green.
 
 - [ ] Step 2: Capture VPS preflight.
 
-    ssh root@23.254.242.90 'cd /opt/codex-quota-monitor && ./deploy/preflight.sh'
+    ssh root@"$VPS_HOST" 'cd /opt/codex-quota-monitor && ./deploy/preflight.sh'
 
 Stop if protected services, listener snapshots, or resource conditions differ.
 
@@ -406,21 +411,21 @@ Use the documented rsync command. Never overwrite /opt/codex-quota-monitor/data/
 
 - [ ] Step 4: Run isolated dry-run and acceptance checks.
 
-    ssh root@23.254.242.90 'cd /opt/codex-quota-monitor && ./deploy/dry-run.sh && ./deploy/postflight.sh && ./deploy/resource-check.sh'
+    ssh root@"$VPS_HOST" 'cd /opt/codex-quota-monitor && ./deploy/dry-run.sh && ./deploy/postflight.sh && ./deploy/resource-check.sh'
 
 Confirm four sources fetch, the real-world post is planned, unfamiliar candidates are possible_reset, and no project process/port remains after cleanup.
 
 - [ ] Step 5: Run bounded history reprocessing twice.
 
-    ssh root@23.254.242.90 'cd /opt/codex-quota-monitor && ./deploy/reprocess-unmatched.sh --days 7 --limit 100'
-    ssh root@23.254.242.90 'cd /opt/codex-quota-monitor && ./deploy/reprocess-unmatched.sh --days 7 --limit 100'
+    ssh root@"$VPS_HOST" 'cd /opt/codex-quota-monitor && ./deploy/reprocess-unmatched.sh --days 7 --limit 100'
+    ssh root@"$VPS_HOST" 'cd /opt/codex-quota-monitor && ./deploy/reprocess-unmatched.sh --days 7 --limit 100'
 
 Expected: first run may change/send eligible missed posts; second run reports zero new changes/sends. Inspect Feishu for one copy per post before resolving uncertain delivery.
 
 - [ ] Step 6: Verify production health and protected services.
 
-    ssh root@23.254.242.90 'systemctl show codex-quota-monitor.timer -p ActiveState -p SubState -p LastTriggerUSec -p NextElapseUSecRealtime'
-    ssh root@23.254.242.90 'cd /opt/codex-quota-monitor && ./deploy/postflight.sh && ./deploy/resource-check.sh'
+    ssh root@"$VPS_HOST" 'systemctl show codex-quota-monitor.timer -p ActiveState -p SubState -p LastTriggerUSec -p NextElapseUSecRealtime'
+    ssh root@"$VPS_HOST" 'cd /opt/codex-quota-monitor && ./deploy/postflight.sh && ./deploy/resource-check.sh'
 
 Verify timer active/waiting, MemoryMax=402653184, CPUQuotaPerSecUSec=300ms, protected services/ports unchanged, and the real missed post has matched=1, expected status, and one successful delivery attempt.
 

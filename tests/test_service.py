@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -106,6 +106,93 @@ def test_reprocess_fails_without_mutation_when_post_is_not_in_feed(tmp_path) -> 
 
     assert feishu.sent == []
     assert store.pending() == []
+
+
+def test_reprocess_unmatched_promotes_and_is_idempotent(tmp_path) -> None:
+    source = Source("thsottiaux")
+    full = Post(
+        "2077607697487188198",
+        "thsottiaux",
+        "Another reset for our Codex and ChatGPT Work users. Should have that "
+        "sweet 100% weekly usage limit back in a few minutes.",
+        datetime.now(UTC),
+        "https://x.com/thsottiaux/status/2077607697487188198",
+    )
+    feed = FakeFeed({"thsottiaux": [full]})
+    service, store, feishu = service_for(tmp_path, (source,), feed)
+    store.record_decision(
+        Post(full.post_id, full.author, "old text", full.published_at, full.url),
+        Decision(False, None, "reset_state_not_explicit"),
+    )
+
+    first = service.reprocess_unmatched()
+    second = service.reprocess_unmatched()
+
+    assert first.scanned == 1
+    assert first.changed == 1
+    assert first.sent == 1
+    assert first.skipped == 0
+    assert second.scanned == 0
+    assert second.changed == 0
+    assert second.sent == 0
+    assert len(feishu.sent) == 1
+    assert store.status()["sent"] == 1
+
+
+def test_reprocess_unmatched_skips_old_and_already_matched_rows(tmp_path) -> None:
+    source = Source("OpenAI")
+    old = Post(
+        "old",
+        "OpenAI",
+        "old text",
+        datetime.now(UTC) - timedelta(days=8),
+        "https://x.com/OpenAI/status/old",
+    )
+    matched = post("already-matched")
+    feed = FakeFeed({"OpenAI": [old, matched]})
+    service, store, feishu = service_for(tmp_path, (source,), feed)
+    store.record_decision(old, Decision(False, None, "old"))
+    store.record_decision(
+        matched,
+        Decision(True, ResetStatus.COMPLETED, "explicit", ("reset",)),
+    )
+
+    summary = service.reprocess_unmatched(days=7, limit=100)
+
+    assert summary.scanned == 0
+    assert summary.changed == 0
+    assert summary.sent == 0
+    assert summary.skipped == 0
+    assert feishu.sent == []
+    assert store.status()["pending"] == 1
+
+
+def test_reprocess_unmatched_counts_still_negative_and_continues_after_source_error(
+    tmp_path,
+) -> None:
+    sources = (Source("OpenAI"), Source("sama"))
+    negative = Post(
+        "negative",
+        "sama",
+        "Codex now has higher rate limits.",
+        datetime.now(UTC),
+        "https://x.com/sama/status/negative",
+    )
+    positive = post("positive", "sama")
+    feed = FakeFeed(
+        {"OpenAI": FeedError("temporary"), "sama": [negative, positive]}
+    )
+    service, store, feishu = service_for(tmp_path, sources, feed)
+    store.record_decision(negative, Decision(False, None, "missing:action"))
+    store.record_decision(positive, Decision(False, None, "old"))
+
+    summary = service.reprocess_unmatched(days=7, limit=100)
+
+    assert summary.scanned == 2
+    assert summary.changed == 1
+    assert summary.sent == 1
+    assert summary.skipped == 1
+    assert len(feishu.sent) == 1
 
 
 def test_explicit_retryable_pending_failure_is_retried_next_run(tmp_path) -> None:

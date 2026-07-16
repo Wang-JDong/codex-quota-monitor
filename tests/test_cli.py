@@ -1,10 +1,12 @@
 import json
+import pytest
 import subprocess
 import sys
 from contextlib import nullcontext
 from dataclasses import dataclass
 
 from codex_quota_monitor import cli
+from codex_quota_monitor.service import ReprocessBatchSummary
 
 
 def test_module_help() -> None:
@@ -43,6 +45,10 @@ class FakeService:
             "changed": True,
             "sent": True,
         }
+
+    def reprocess_unmatched(self, days=7, limit=100):
+        self.reprocessed_unmatched = (days, limit)
+        return ReprocessBatchSummary(3, 1, 1, 2)
 
 
 class FakeStore:
@@ -180,3 +186,38 @@ def test_reprocess_post_uses_lock_and_prints_json(monkeypatch, capsys) -> None:
         "changed": True,
         "sent": True,
     }
+
+
+def test_reprocess_unmatched_uses_safe_defaults_and_prints_summary(
+    monkeypatch, capsys
+) -> None:
+    service, store, feishu, captured = run_cli(
+        monkeypatch, capsys, "reprocess-unmatched"
+    )
+
+    assert service.reprocessed_unmatched == (7, 100)
+    assert store.locked == 1
+    assert feishu.sent == []
+    assert json.loads(captured.out) == {
+        "scanned": 3,
+        "changed": 1,
+        "sent": 1,
+        "skipped": 2,
+    }
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [("--days", "0"), ("--days", "32"), ("--limit", "0"), ("--limit", "101")],
+)
+def test_reprocess_unmatched_rejects_out_of_range_values(
+    monkeypatch, option: str, value: str
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["codex-quota-monitor", "reprocess-unmatched", option, value],
+    )
+
+    with pytest.raises(SystemExit):
+        cli.main()

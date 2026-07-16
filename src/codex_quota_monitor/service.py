@@ -1,7 +1,8 @@
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 import logging
 
-from .classifier import classify
+from .classifier import CLASSIFIER_VERSION, classify
 from .feed import FeedError, RssHubClient
 from .feishu import (
     FeishuClient,
@@ -30,6 +31,14 @@ class ReprocessSummary:
     matched: bool
     changed: bool
     sent: bool
+
+
+@dataclass(frozen=True)
+class ReprocessBatchSummary:
+    scanned: int
+    changed: int
+    sent: int
+    skipped: int
 
 
 class MonitorService:
@@ -94,6 +103,14 @@ class MonitorService:
         self.store.mark_health_sent(transition)
         return True
 
+    def _promote_and_send(self, post: Post, decision: Decision) -> tuple[bool, bool]:
+        changed = self.store.refresh_unmatched(
+            post, decision, CLASSIFIER_VERSION
+        )
+        if not changed:
+            return False, False
+        return True, self._send_business(post, decision)
+
     def reprocess(self, post_id: str) -> ReprocessSummary:
         found: Post | None = None
         for source in self.sources:
@@ -110,11 +127,56 @@ class MonitorService:
         decision = classify(found, self.trusted)
         if not decision.matched:
             raise ValueError(f"post did not match: {decision.reason}")
-        changed = self.store.promote_unmatched(found, decision)
-        if not changed:
-            return ReprocessSummary(post_id, True, False, False)
-        sent = self._send_business(found, decision)
-        return ReprocessSummary(post_id, True, True, sent)
+        changed, sent = self._promote_and_send(found, decision)
+        return ReprocessSummary(post_id, True, changed, sent)
+
+    def reprocess_unmatched(
+        self, days: int = 7, limit: int = 100
+    ) -> ReprocessBatchSummary:
+        if not 1 <= days <= 31:
+            raise ValueError("days must be between 1 and 31")
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+
+        candidates = self.store.unmatched_since(
+            datetime.now(UTC) - timedelta(days=days), limit
+        )
+        feed_index: dict[str, Post] = {}
+        for source in self.sources:
+            try:
+                posts = self.feed.fetch(source)
+            except FeedError as exc:
+                logger.error(
+                    "reprocess source @%s failed: %s",
+                    source.handle,
+                    "authentication failed" if exc.auth_failed else "feed fetch failed",
+                )
+                continue
+            for post in posts:
+                feed_index.setdefault(post.post_id, post)
+
+        scanned = changed = sent = skipped = 0
+        for stored in candidates:
+            scanned += 1
+            current = feed_index.get(stored.post_id)
+            if current is None:
+                skipped += 1
+                continue
+            decision = classify(current, self.trusted)
+            if not decision.matched:
+                self.store.refresh_unmatched(
+                    current, decision, CLASSIFIER_VERSION
+                )
+                skipped += 1
+                continue
+            promoted, delivered = self._promote_and_send(current, decision)
+            if not promoted:
+                skipped += 1
+                continue
+            changed += 1
+            sent += int(delivered)
+
+        return ReprocessBatchSummary(scanned, changed, sent, skipped)
 
     def run(self, dry_run: bool = False) -> RunSummary:
         fetched = 0

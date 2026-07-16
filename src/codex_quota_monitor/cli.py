@@ -16,6 +16,21 @@ from .store import Store
 DEFAULT_CONFIG = Path("/opt/codex-quota-monitor/config/sources.json")
 
 
+def _bounded_int(name: str, minimum: int, maximum: int):
+    def parse(value: str) -> int:
+        try:
+            parsed = int(value)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(f"{name} must be an integer") from exc
+        if not minimum <= parsed <= maximum:
+            raise argparse.ArgumentTypeError(
+                f"{name} must be between {minimum} and {maximum}"
+            )
+        return parsed
+
+    return parse
+
+
 def build(config: Path) -> tuple[MonitorService, Store, FeishuClient]:
     settings = load_settings(config)
     store = Store(settings.database_path, settings.failure_threshold)
@@ -47,6 +62,16 @@ def _parser() -> argparse.ArgumentParser:
         "reprocess-post", help="reclassify and deliver one previously seen post"
     )
     reprocess.add_argument("post_id")
+    reprocess_unmatched = commands.add_parser(
+        "reprocess-unmatched",
+        help="reclassify a bounded recent window of unmatched posts",
+    )
+    reprocess_unmatched.add_argument(
+        "--days", type=_bounded_int("days", 1, 31), default=7
+    )
+    reprocess_unmatched.add_argument(
+        "--limit", type=_bounded_int("limit", 1, 100), default=100
+    )
     resolve = commands.add_parser(
         "delivery-resolve", help="manually resolve an uncertain delivery"
     )
@@ -87,6 +112,10 @@ def main() -> None:
             result = service.reprocess(args.post_id)
         payload = result if isinstance(result, dict) else asdict(result)
         print(json.dumps(payload, ensure_ascii=False))
+    elif args.command == "reprocess-unmatched":
+        with store.run_lock():
+            result = service.reprocess_unmatched(args.days, args.limit)
+        print(json.dumps(asdict(result), ensure_ascii=False))
     elif args.command == "delivery-resolve":
         state = store.resolve_delivery(args.post_id, args.resolution)
         print(

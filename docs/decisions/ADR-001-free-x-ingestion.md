@@ -11,7 +11,7 @@
 
 在 VPS 内按需启动项目私有 RSSHub，通过环境变量提供一个专用 X 会话的 `auth_token` Cookie，并仅在 loopback 端口提供 feed。RSSHub 版本由 `package-lock.json` 固定，Node.js 由项目私有运行时提供，不改动系统 Node.js。
 
-免费适配器当前只使用 `UserTweets` 抓取四个白名单账号的顶层原创帖，并关闭回复和转发。转发、引用和回复不作为证据。已观测到 `UserTweetsAndReplies` 当前返回 HTTP 404，因此不声称支持回复监控；只有上游恢复且测试保护覆盖该路由后才能更改本决策。
+免费适配器以 `UserTweets` 抓取四个白名单账号的顶层原创帖，并以 `UserMedia` 补充主时间线可能漏掉的带媒体帖子，按 X status ID 合并去重。每条媒体补充仍须通过配置 handle 与 X status URL 的作者校验。转发、引用正文和回复不作为证据。已观测到 `UserTweetsAndReplies` 当前返回 HTTP 404，因此不声称支持专门的回复监控；只有上游恢复且测试保护覆盖该路由后才能更改本决策。
 
 ## 理由
 

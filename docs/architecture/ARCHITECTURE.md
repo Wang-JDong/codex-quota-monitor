@@ -14,9 +14,9 @@
 | --- | --- | --- |
 | systemd timer | 默认每 30 分钟触发 service | 常驻的只是 systemd 计时器 |
 | `run-monitor.sh` | 启动 RSSHub、验证监听者、运行 Python、无条件清理 | 单次任务，最长 5 分钟 |
-| 项目私有 RSSHub | 使用 X `auth_token` 和 `UserTweets` 提供四个用户的顶层原创帖 | 仅 loopback；生产 `1200`，dry-run `1201` |
-| Query ID refresh | 从 X 官方前端包严格提取两个查询 ID | 单独 root 预处理；仅 RSSHub `dist-lib` 可写 |
-| `RssHubClient` | 抓取、重试、JSON/XML 解析、完整正文选择和原帖作者/链接校验 | Python 3.12 标准库 |
+| 项目私有 RSSHub | 使用 X `auth_token` 和 `UserTweets` + `UserMedia` 提供四个用户的时间线与媒体补充 | 仅 loopback；生产 `1200`，dry-run `1201` |
+| Query ID refresh | 从 X 官方前端包严格提取三个查询 ID | 单独 root 预处理；仅 RSSHub `dist-lib` 可写 |
+| `RssHubClient` | 双路抓取、按帖子 ID 去重、重试、JSON/XML 解析、完整正文选择和作者/链接校验 | Python 3.12 标准库 |
 | 确定性分类器 | 白名单、产品、限制、动作/时间证据、五类状态和排除语义 | 无网络、无 LLM |
 | `Store` | 基线、去重、投递状态和健康状态 | SQLite/WAL，生产持久化 |
 | `FeishuClient` | 签名并发送业务/健康卡片 | 只访问配置的 Webhook |
@@ -40,7 +40,10 @@ sequenceDiagram
     Runner->>App: run with file lock
     loop four trusted sources
         App->>Hub: GET /twitter/user/:handle
-        Hub-->>App: RSS/Atom entries
+        Hub-->>App: UserTweets entries
+        App->>Hub: GET /twitter/media/:handle
+        Hub-->>App: UserMedia entries
+        App->>App: merge by X status ID
         App->>App: verify origin and classify
         App->>DB: baseline or persist decision
         opt matched and delivery available
@@ -101,7 +104,7 @@ stateDiagram-v2
 - 可信身份：路由指定的 handle 与返回的 X status URL 作者必须一致；配置白名单为 `@OpenAI`、`@OpenAIDevs`、`@thsottiaux` 和 `@sama`。
 - 不可信内容：帖子正文、HTML、标题、引用文本和返回的 URL 都必须被解析与校验，不能成为代码或日志格式。
 - 引用边界：分类器只读白名单作者的原创正文；引用作者是否可信都不改变引用元数据的非证据属性。
-- 路由边界：生产适配器强制 `includeReplies=0` 和 `includeRts=0`，仅调用 `UserTweets` 的顶层原创帖。转发、引用和回复不作为证据。`UserTweetsAndReplies` 当前返回 HTTP 404；不得在缺少测试保护时开启。
+- 路由边界：生产适配器用强制 `includeReplies=0`、`includeRts=0` 的 `UserTweets` 读取顶层原创帖，再用 `UserMedia` 补充可能被主时间线漏掉的带媒体帖子；两个结果按 X status ID 去重，所有条目都必须通过作者和 status URL 校验。转发、引用正文和回复不作为证据；`UserTweetsAndReplies` 当前返回 HTTP 404，不得在缺少测试保护时开启。
 - 秘密边界：`.env` 是唯一生产秘密入口，文件属于 `root:codex-monitor` 且模式为 `0640`。
 - 网络边界：RSSHub 只能绑定 loopback；runner 会校验监听地址和 PID 归属，防止把其他进程当成健康的 RSSHub。
 - 写入边界：Query ID 更新由 root 预处理命令完成，只为锁定 RSSHub 包的 `dist-lib` 开放写入；正式 RSSHub 和 Python 仍以 `codex-monitor` 运行。

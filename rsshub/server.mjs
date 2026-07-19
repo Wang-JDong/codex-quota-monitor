@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const SUPPORTED_OPERATIONS = Object.freeze([
   "UserByScreenName",
   "UserTweets",
+  "UserMedia",
 ]);
 const QUERY_ID = /^[A-Za-z0-9_-]{10,128}$/;
 const MAX_PAGE_BYTES = 2 * 1024 * 1024;
@@ -17,6 +18,7 @@ const MAX_URL_LENGTH = 2048;
 const MAX_CONCURRENT_REQUESTS = 2;
 const FETCH_TIMEOUT_MS = 15_000;
 const ROUTE = /^\/twitter\/user\/[A-Za-z0-9_]{1,15}\/includeReplies=0&includeRts=0&count=[1-9][0-9]?&readable=1&showQuotedInTitle=0$/;
+const MEDIA_ROUTE = /^\/twitter\/media\/[A-Za-z0-9_]{1,15}$/;
 
 
 function requireQueryId(value) {
@@ -274,7 +276,11 @@ async function start() {
       sendJson(response, 200, { status: "ok" });
       return;
     }
-    if (!parsed.pathname.startsWith("/twitter/user/") || !ROUTE.test(parsed.pathname) || parsed.search) {
+    const isUserRoute =
+      parsed.pathname.startsWith("/twitter/user/") && ROUTE.test(parsed.pathname);
+    const isMediaRoute =
+      parsed.pathname.startsWith("/twitter/media/") && MEDIA_ROUTE.test(parsed.pathname);
+    if ((!isUserRoute && !isMediaRoute) || parsed.search) {
       sendJson(response, 404, { error: "not found" });
       return;
     }

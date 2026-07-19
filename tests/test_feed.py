@@ -65,6 +65,61 @@ def test_fetches_posts_from_exact_lightweight_route() -> None:
     assert posts[0].author == "thsottiaux"
 
 
+def test_fetch_all_merges_media_posts_missing_from_user_timeline() -> None:
+    primary = _json_response(
+        [
+            {
+                "title": "A regular timeline update.",
+                "author": "thsottiaux",
+                "description": "A regular timeline update.",
+                "pubDate": "Sat, 18 Jul 2026 03:30:00 GMT",
+                "link": "https://x.com/thsottiaux/status/2078320950488297000",
+                "guid": "https://x.com/thsottiaux/status/2078320950488297000",
+            }
+        ]
+    )
+    media = _json_response(
+        [
+            {
+                "title": "Oops... I did it again. Enjoy reset usage limits for all paid users for Codex and ChatGPT Work.",
+                "author": "thsottiaux",
+                "description": (
+                    "<p>Oops... I did it again. Enjoy reset usage limits for all paid users "
+                    "for Codex and ChatGPT Work.</p>"
+                ),
+                "pubDate": "Sat, 18 Jul 2026 03:28:22 GMT",
+                "link": "https://x.com/thsottiaux/status/2078320950488297917",
+                "guid": "https://x.com/thsottiaux/status/2078320950488297917",
+            },
+            {
+                "title": "Re @someone unrelated image",
+                "author": "thsottiaux",
+                "description": "<p>Re @someone unrelated image</p>",
+                "pubDate": "Sat, 18 Jul 2026 03:27:00 GMT",
+                "link": "https://x.com/thsottiaux/status/2078320950488297999",
+                "guid": "https://x.com/thsottiaux/status/2078320950488297999",
+                "_extra": {
+                    "links": [{"type": "reply"}],
+                },
+            },
+        ]
+    )
+    client = RssHubClient("http://rsshub:1200", timeout=20, retries=1, count=20)
+
+    with patch(
+        "codex_quota_monitor.feed.urlopen", side_effect=[primary, media]
+    ) as mocked:
+        posts = client.fetch_all(Source("thsottiaux", False))
+
+    assert [post.post_id for post in posts] == [
+        "2078320950488297000",
+        "2078320950488297917",
+    ]
+    assert mocked.call_args_list[1].args[0].full_url == (
+        "http://rsshub:1200/twitter/media/thsottiaux"
+    )
+
+
 def _json_response(items: list[dict[str, str]]) -> Response:
     return Response(
         json.dumps({"title": "trusted timeline", "item": items}).encode(),

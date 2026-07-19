@@ -65,7 +65,7 @@ make postflight
 3. 若为认证失败，执行 Cookie rotation。
 4. 若 RSSHub 无法启动，先检查日志中的 Query ID refresh，再检查项目私有 Node.js、`rsshub/node_modules` 和端口占用；不得杀死未识别进程抢占端口，也不得放宽整个 `/opt/codex-quota-monitor` 的写权限。
 
-当前免费 X 适配器的运维基线是：只使用 `UserTweets` 监控四个账号的顶层原创帖，转发、引用和回复不作为证据。`UserTweetsAndReplies` 当前返回 HTTP 404；不要通过打开 `includeReplies` 规避故障。只有上游恢复，且 JSON 解析、作者校验、去重和非证据边界均在测试保护下通过后，才可启用回复。
+当前免费 X 适配器的运维基线是：用 `UserTweets` 监控四个账号的顶层原创帖，并用 `UserMedia` 补充可能被主时间线漏掉的带媒体帖子；两个流按 X status ID 去重，所有条目都必须通过作者和 status URL 校验。转发、引用正文和回复不作为证据。`UserTweetsAndReplies` 当前返回 HTTP 404；不要通过打开 `includeReplies` 规避故障。只有上游恢复，且 JSON 解析、作者校验、去重和非证据边界均在测试保护下通过后，才可启用专门的回复监控。
 5. `make dry-run` 通过后，再执行 `make postflight` 和 `make resource-check`，然后 `make enable`。
 
 ### 只有个别来源失败

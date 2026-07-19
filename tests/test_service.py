@@ -67,6 +67,34 @@ def test_first_run_baselines_then_new_match_sends_once(tmp_path) -> None:
     assert "已经重置" in feishu.sent[0].title
 
 
+def test_run_uses_media_supplement_when_timeline_omits_new_post(tmp_path) -> None:
+    source = Source("thsottiaux")
+    old = post("2078320950488297000", "thsottiaux")
+    missed = post("2078320950488297917", "thsottiaux")
+
+    class FetchAllOnlyFeed:
+        def __init__(self) -> None:
+            self.current = [old]
+
+        def fetch(self, _source: Source) -> list[Post]:
+            raise AssertionError("the service must use the supplemented fetch")
+
+        def fetch_all(self, _source: Source) -> list[Post]:
+            return list(self.current)
+
+    feed = FetchAllOnlyFeed()
+    service, _store, feishu = service_for(tmp_path, (source,), feed)
+
+    service.run()
+    feed.current = [missed, old]
+    summary = service.run()
+
+    assert summary.new_posts == 1
+    assert summary.matched_posts == 1
+    assert summary.sent_posts == 1
+    assert len(feishu.sent) == 1
+
+
 def test_reprocesses_known_unmatched_post_and_sends_exactly_once(tmp_path) -> None:
     source = Source("thsottiaux")
     full = Post(

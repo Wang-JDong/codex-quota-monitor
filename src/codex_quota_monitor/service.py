@@ -55,6 +55,12 @@ class MonitorService:
         self.feishu = feishu
         self.trusted = frozenset(source.handle.casefold() for source in sources)
 
+    def _fetch_posts(self, source: Source) -> list[Post]:
+        fetch_all = getattr(self.feed, "fetch_all", None)
+        if callable(fetch_all):
+            return fetch_all(source)
+        return self.feed.fetch(source)
+
     def _send_business(self, post: Post, decision: Decision) -> bool:
         if not self.store.claim_delivery(post.post_id):
             return True
@@ -115,7 +121,7 @@ class MonitorService:
         found: Post | None = None
         for source in self.sources:
             try:
-                posts = self.feed.fetch(source)
+                posts = self._fetch_posts(source)
             except FeedError:
                 continue
             found = next((post for post in posts if post.post_id == post_id), None)
@@ -144,7 +150,7 @@ class MonitorService:
         feed_index: dict[str, Post] = {}
         for source in self.sources:
             try:
-                posts = self.feed.fetch(source)
+                posts = self._fetch_posts(source)
             except FeedError as exc:
                 logger.error(
                     "reprocess source @%s failed: %s",
@@ -195,7 +201,7 @@ class MonitorService:
 
         for source in self.sources:
             try:
-                posts = self.feed.fetch(source)
+                posts = self._fetch_posts(source)
                 fetched += 1
             except FeedError as exc:
                 auth_failed = auth_failed or exc.auth_failed

@@ -107,12 +107,51 @@ class RssHubClient:
         )
         return f"{self.base_url}/twitter/user/{source.handle}/{route_parameters}"
 
+    def _media_url(self, source: Source) -> str:
+        return f"{self.base_url}/twitter/media/{source.handle}"
+
     def fetch(self, source: Source) -> list[Post]:
+        return self._fetch_url(source, self._url(source))
+
+    def fetch_media(self, source: Source) -> list[Post]:
+        return self._fetch_url(
+            source, self._media_url(source), exclude_replies=True
+        )
+
+    def fetch_all(self, source: Source) -> list[Post]:
+        """Fetch the normal timeline plus a bounded media-timeline supplement.
+
+        RSSHub's UserTweets operation can omit quote posts that carry media.
+        The media route is deliberately a supplement, not a replacement, so a
+        transient failure there does not take a healthy primary feed down.
+        """
+        primary: list[Post] = []
+        primary_error: FeedError | None = None
+        try:
+            primary = self.fetch(source)
+        except FeedError as exc:
+            primary_error = exc
+
+        try:
+            media = self.fetch_media(source)
+        except FeedError:
+            if primary_error is not None:
+                raise primary_error
+            return primary
+
+        merged: dict[str, Post] = {}
+        for post in (*primary, *media):
+            merged.setdefault(post.post_id, post)
+        return list(merged.values())
+
+    def _fetch_url(
+        self, source: Source, url: str, *, exclude_replies: bool = False
+    ) -> list[Post]:
         last_error: Exception | None = None
         for attempt in range(self.retries):
             try:
                 request = Request(
-                    self._url(source),
+                    url,
                     headers={
                         "Accept": (
                             "application/json, application/rss+xml, "
@@ -140,13 +179,24 @@ class RssHubClient:
                         raise ValueError("RSSHub returned a structured error response")
                     if not items:
                         raise FeedError(f"empty feed for @{source.handle}")
-                    return [self._json_post(source, item) for item in items]
+                    posts = [
+                        self._json_post(source, item)
+                        for item in items
+                        if not (exclude_replies and _json_item_is_reply(item))
+                    ]
+                    if not posts:
+                        raise FeedError(f"empty feed for @{source.handle}")
+                    return posts
                 if response_type != "xml":
                     if _has_auth_failure(body):
                         raise FeedError("X authentication failed", auth_failed=True)
                     raise ValueError("RSSHub returned a structured error response")
                 root = ElementTree.fromstring(body)
                 entries = self._entries(root)
+                if exclude_replies:
+                    entries = [
+                        entry for entry in entries if not _xml_entry_is_reply(entry)
+                    ]
                 if not entries:
                     raise FeedError(f"empty feed for @{source.handle}")
                 return [self._post(source, entry) for entry in entries]
@@ -303,6 +353,29 @@ def _json_items(payload: object) -> list[object] | None:
     if not isinstance(items, list):
         return None
     return items
+
+
+def _json_item_is_reply(item: object) -> bool:
+    if not isinstance(item, dict):
+        return False
+    extra = item.get("_extra")
+    if not isinstance(extra, dict):
+        return False
+    links = extra.get("links")
+    if not isinstance(links, list):
+        return False
+    return any(
+        isinstance(link, dict) and link.get("type") == "reply" for link in links
+    )
+
+
+def _xml_entry_is_reply(entry: ElementTree.Element) -> bool:
+    for child in entry:
+        if _local_name(child.tag) != "link":
+            continue
+        if child.attrib.get("rel", "").casefold() == "reply":
+            return True
+    return False
 
 
 def _json_author_matches(value: object, expected_handle: str) -> bool:

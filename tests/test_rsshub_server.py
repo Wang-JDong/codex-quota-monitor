@@ -20,6 +20,8 @@ def test_server_is_private_bounded_and_uses_rsshub_public_api() -> None:
     assert 'host: "127.0.0.1"' in source
     assert 'pathname === "/healthz"' in source
     assert 'pathname.startsWith("/twitter/user/")' in source
+    assert 'pathname.startsWith("/twitter/media/")' in source
+    assert "MEDIA_ROUTE" in source
     assert "await init(process.env)" in source
     assert "await request(" in source
     assert "dist/index.mjs" not in source
@@ -37,7 +39,7 @@ def test_server_is_private_bounded_and_uses_rsshub_public_api() -> None:
     )[0]
 
 
-def test_extract_query_ids_requires_both_supported_operations() -> None:
+def test_extract_query_ids_requires_all_supported_operations() -> None:
     script = """
       import { extractQueryIds } from './rsshub/server.mjs';
       const bundle = process.argv[1];
@@ -47,6 +49,7 @@ def test_extract_query_ids_requires_both_supported_operations() -> None:
     valid = (
         'queryId:"Abc_def-1234567890",operationName:"UserByScreenName";'
         'queryId:"Zyx_987-1234567890",operationName:"UserTweets";'
+        'queryId:"Med_987-1234567890",operationName:"UserMedia";'
     )
     result = _node_eval(script, valid)
 
@@ -54,6 +57,7 @@ def test_extract_query_ids_requires_both_supported_operations() -> None:
     assert json.loads(result.stdout) == {
         "UserByScreenName": "Abc_def-1234567890",
         "UserTweets": "Zyx_987-1234567890",
+        "UserMedia": "Med_987-1234567890",
     }
 
     missing = _node_eval(script, valid.split(";")[0])
@@ -69,11 +73,13 @@ def test_extract_query_ids_rejects_invalid_or_ambiguous_ids() -> None:
     invalid = (
         'queryId:"../secret",operationName:"UserByScreenName";'
         'queryId:"Zyx_987-1234567890",operationName:"UserTweets";'
+        'queryId:"Med_987-1234567890",operationName:"UserMedia";'
     )
     ambiguous = (
         'queryId:"Abc_def-1234567890",operationName:"UserByScreenName";'
         'queryId:"Other_def-1234567890",operationName:"UserByScreenName";'
         'queryId:"Zyx_987-1234567890",operationName:"UserTweets";'
+        'queryId:"Med_987-1234567890",operationName:"UserMedia";'
     )
 
     assert _node_eval(script, invalid).returncode == 9
@@ -86,12 +92,14 @@ def test_replaces_only_supported_fallback_ids_and_fails_closed() -> None:
       const source = `const fallbackIds = {
         UserTweets: "OldTweets123456789",
         UserByScreenName: "OldUser123456789",
+        UserMedia: "OldMedia123456789",
         UserTweetsAndReplies: "KeepReplies123456"
       };`;
       try {
         console.log(replaceFallbackIds(source, {
           UserTweets: "NewTweets123456789",
-          UserByScreenName: "NewUser123456789"
+          UserByScreenName: "NewUser123456789",
+          UserMedia: "NewMedia123456789"
         }));
       } catch { process.exit(11); }
     """
@@ -100,6 +108,7 @@ def test_replaces_only_supported_fallback_ids_and_fails_closed() -> None:
     assert result.returncode == 0, result.stderr
     assert 'UserTweets: "NewTweets123456789"' in result.stdout
     assert 'UserByScreenName: "NewUser123456789"' in result.stdout
+    assert 'UserMedia: "NewMedia123456789"' in result.stdout
     assert 'UserTweetsAndReplies: "KeepReplies123456"' in result.stdout
 
     ambiguous = """
